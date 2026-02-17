@@ -1,0 +1,424 @@
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -4,6 +4,9 @@
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     <title>Intune Command Center - Team 2</title>
++    <link rel="preconnect" href="https://fonts.googleapis.com" />
++    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
++    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+     <style>
+       * { margin: 0; padding: 0; box-sizing: border-box; }
+       html, body, #root { height: 100%; }
+-      body { background: #060b14; overflow: hidden; }
++      body { background: #0c0c0e; overflow: hidden; }
+     </style>
+
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -238,7 +238,7 @@ function StatusBadge({ status }) {
+     "In Grace Period": { bg: "#3b2e10", text: "#fbbf24", border: "#78350f" },
+     Pending: { bg: "#1e293b", text: "#94a3b8", border: "#334155" },
+     Deployed: { bg: "#0d3320", text: "#34d399", border: "#166534" },
+-    Queued: { bg: "#172554", text: "#60a5fa", border: "#1e3a5f" },
++    Queued: { bg: "#2a2416", text: "#d4a574", border: "#4a3a1a" },
+     Error: { bg: "#3b1118", text: "#f87171", border: "#7f1d1d" },
+   };
+@@ -258,14 +258,14 @@ function ActionCard({ icon, title, subtitle, onClick }) {
+         background: hovered ? "rgba(19,31,56,0.8)" : "rgba(13,21,38,0.6)",
+         backdropFilter: "blur(12px)",
+         WebkitBackdropFilter: "blur(12px)",
+-        border: `1px solid ${hovered ? "rgba(59,130,246,0.4)" : "rgba(24,36,65,0.6)"}`,
+-        borderRadius: 14, padding: "18px 20px", cursor: "pointer", textAlign: "left",
++        border: `1px solid ${hovered ? "rgba(201,162,39,0.4)" : "rgba(24,36,65,0.6)"}`,
++        borderRadius: 10, padding: "18px 20px", cursor: "pointer", textAlign: "left",
+         transition: "all 0.2s ease",
+         transform: hovered ? "translateY(-2px) scale(1.02)" : "none",
+         boxShadow: hovered
+-          ? "0 8px 30px rgba(37,99,235,0.15), inset 0 1px 0 rgba(59,130,246,0.1)"
++          ? "0 8px 24px rgba(201,162,39,0.12), inset 0 1px 0 rgba(201,162,39,0.08)"
+           : "0 0 0 0 transparent",
+         width: "100%",
+         position: "relative",
+@@ -273,10 +273,10 @@ function ActionCard({ icon, title, subtitle, onClick }) {
+       <div style={{
+         position: "absolute", top: 0, left: 0, right: 0, height: 2,
+         background: hovered
+-          ? "linear-gradient(90deg, transparent, rgba(59,130,246,0.5), transparent)"
+-          : "linear-gradient(90deg, transparent, rgba(59,130,246,0.15), transparent)",
++          ? "linear-gradient(90deg, transparent, rgba(201,162,39,0.4), transparent)"
++          : "linear-gradient(90deg, transparent, rgba(201,162,39,0.12), transparent)",
+         transition: "all 0.2s ease",
+       }} />
+       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+         <span style={{
+-          fontSize: 22,
+-          filter: hovered ? "drop-shadow(0 0 6px rgba(59,130,246,0.3))" : "none",
++          fontSize: 22,
++          filter: hovered ? "drop-shadow(0 0 6px rgba(201,162,39,0.25))" : "none",
+           transition: "filter 0.2s ease",
+         }}>{icon}</span>
+@@ -309,7 +309,7 @@ function StepProgress({ steps, gradient }) {
+-  const accent = gradient ? gradient.split(",")[0].trim() : "#3b82f6";
++  const accent = gradient ? gradient.split(",")[0].trim() : "#c9a227";
+   return (
+     <div style={{ marginTop: 14, padding: "2px 0" }}>
+       {steps.map((step, i) => {
+         const isLast = i === steps.length - 1;
+-        const cfg = {
++        const cfg = {
+           pending: { bg: "transparent", border: "#334155", icon: null, textColor: "#475569" },
+           active:  { bg: accent, border: accent, icon: "...", textColor: "#e2e8f0" },
+           done:    { bg: "#059669", border: "#059669", icon: "\u2713", textColor: "#34d399" },
+@@ -332,7 +332,7 @@ function StepProgress({ steps, gradient }) {
+                 fontSize: 10, fontWeight: 700, color: "#fff",
+                 animation: step.status === "active" ? "pulseGlow 1.5s infinite" : "none",
+                 transition: "all 0.3s ease",
+-                boxShadow: step.status === "done" ? "0 0 8px rgba(5,150,105,0.3)" : step.status === "active" ? "0 0 10px rgba(59,130,246,0.3)" : "none",
++                boxShadow: step.status === "done" ? "0 0 8px rgba(5,150,105,0.3)" : step.status === "active" ? "0 0 10px rgba(201,162,39,0.25)" : "none",
+               }}>{cfg.icon}</div>
+               {!isLast && (
+                 <div style={{
+@@ -385,7 +385,7 @@ function LiveActionTracker({ actionLabel, deviceStates, totalCount, completedCount
+         <div style={{
+           height: "100%", borderRadius: 99,
+           background: allDone
+             ? "linear-gradient(90deg, #059669, #34d399)"
+-            : "linear-gradient(90deg, #1e40af, #3b82f6)",
++            : "linear-gradient(90deg, #a67c00, #c9a227)",
+           width: `${pct}%`, transition: "width 0.4s ease",
+           position: "relative", overflow: "hidden",
+         }}>
+@@ -410,7 +410,7 @@ function LiveActionTracker({ actionLabel, deviceStates, totalCount, completedCount
+             }}>{d.name}</span>
+             <span style={{ fontSize: 11, minWidth: 24, textAlign: "right" }}>
+               {d.status === "pending" && <span style={{ color: "#334155" }}>--</span>}
+-              {d.status === "processing" && <span style={{ color: "#60a5fa", animation: "typingBounce 1s infinite" }}>...</span>}
++              {d.status === "processing" && <span style={{ color: "#d4a574", animation: "typingBounce 1s infinite" }}>...</span>}
+               {d.status === "success" && <span style={{ color: "#34d399" }}>{"\u2713"}</span>}
+               {d.status === "error" && <span style={{ color: "#f87171" }}>{"\u2717"}</span>}
+             </span>
+@@ -438,10 +438,10 @@ function DeviceTable({ devices, onAction, selectable, selected, onSelect }) {
+ 
+   const checkboxStyle = (checked) => ({
+     width: 16, height: 16, borderRadius: 4, cursor: "pointer",
+     border: checked ? "none" : "2px solid #334155",
+-    background: checked ? "linear-gradient(135deg, #2563eb, #3b82f6)" : "transparent",
++    background: checked ? "linear-gradient(135deg, #a67c00, #c9a227)" : "transparent",
+     display: "flex", alignItems: "center", justifyContent: "center",
+     flexShrink: 0, transition: "all 0.15s ease",
+     transform: checked ? "scale(1.1)" : "scale(1)",
+-    boxShadow: checked ? "0 0 8px rgba(59,130,246,0.3)" : "none",
++    boxShadow: checked ? "0 0 8px rgba(201,162,39,0.25)" : "none",
+   });
+ 
+   return (
+@@ -499,9 +499,9 @@ function DeviceTable({ devices, onAction, selectable, selected, onSelect }) {
+                       {[{ label: "⟳", action: "sync", title: "Sync" }, { label: "↻", action: "reboot", title: "Restart" }].map(a => (
+                         <button key={a.action} title={a.title}
+                           onClick={(e) => { e.stopPropagation(); onAction(d.id, d.name, a.action); }}
+-                          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(59,130,246,0.4)"; e.currentTarget.style.color = "#60a5fa"; e.currentTarget.style.boxShadow = "0 0 12px rgba(59,130,246,0.15)"; }}
++                          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(201,162,39,0.4)"; e.currentTarget.style.color = "#d4a574"; e.currentTarget.style.boxShadow = "0 0 12px rgba(201,162,39,0.12)"; }}
+                           onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.boxShadow = "none"; }}
+                           style={{
+                             width: 28, height: 28, borderRadius: 6,
+@@ -533,14 +533,14 @@ function BulkActionBar({ count, onSync, onReboot, onWipe, onRetire, onClear, busy
+       marginTop: 10, padding: "12px 16px",
+       background: "rgba(12,21,36,0.7)",
+       backdropFilter: "blur(12px)",
+       WebkitBackdropFilter: "blur(12px)",
+-      border: "1px solid rgba(59,130,246,0.3)", borderRadius: 12,
++      border: "1px solid rgba(201,162,39,0.25)", borderRadius: 12,
+       display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8,
+       animation: "fadeSlideIn 0.2s ease",
+       position: "relative", overflow: "hidden",
+     }}>
+       <div style={{
+         position: "absolute", top: 0, left: 0, right: 0, height: 2,
+-        background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.4), transparent)",
++        background: "linear-gradient(90deg, transparent, rgba(201,162,39,0.35), transparent)",
+       }} />
+       <div style={{ color: "#e2e8f0", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+         <span style={{
+-          background: "linear-gradient(135deg, #2563eb, #3b82f6)", color: "#fff",
++          background: "linear-gradient(135deg, #a67c00, #c9a227)", color: "#fff",
+           borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700,
+         }}>{count}</span>
+@@ -556,7 +556,7 @@ function BulkActionBar({ count, onSync, onReboot, onWipe, onRetire, onClear, busy
+           fontSize: 12, cursor: busy ? "not-allowed" : "pointer", transition: "all 0.2s",
+           opacity: busy ? 0.5 : 1, display: "flex", alignItems: "center", gap: 5,
+           backdropFilter: "blur(4px)",
+   };
+   return (
+-        <button onClick={onSync} disabled={busy} style={{ ...btnBase, background: "#172554", color: "#60a5fa" }}>
++        <button onClick={onSync} disabled={busy} style={{ ...btnBase, background: "#2a2416", color: "#d4a574" }}>
+           ⟳ Sync
+         </button>
+         <button onClick={onReboot} disabled={busy} style={{ ...btnBase, background: "#3b2e10", color: "#fbbf24" }}>
+@@ -593,7 +593,7 @@ function TargetSelector({ devices, preSelected, onConfirm, actionLabel, gradient
+     onConfirm(selectedDevices, mode === "all");
+   };
+ 
+-  const accent = gradient ? gradient.split(",")[0].trim() : "#3b82f6";
++  const accent = gradient ? gradient.split(",")[0].trim() : "#c9a227";
+ 
+   if (confirmed) {
+@@ -662,7 +662,7 @@ function TargetSelector({ devices, preSelected, onConfirm, actionLabel, gradient
+         background: selected.length > 0
+-          ? `linear-gradient(135deg, ${gradient || "#2563eb, #3b82f6"})`
++          ? `linear-gradient(135deg, ${gradient || "#a67c00, #c9a227"})`
+           : "#1e293b",
+         color: selected.length > 0 ? "#fff" : "#475569",
+         transition: "all 0.3s", letterSpacing: 0.3,
+         boxShadow: selected.length > 0 ? `0 4px 20px ${accent}30` : "none",
+@@ -691,7 +691,7 @@ function DeployCard({ title, subtitle, meta, gradient, onDeploy, status, steps }
+     }}>
+       <div style={{
+         position: "absolute", top: 0, left: 0, right: 0, height: 2,
+-        background: `linear-gradient(90deg, transparent, ${(gradient || "#3b82f6").split(",")[0].trim()}, transparent)`,
++        background: `linear-gradient(90deg, transparent, ${(gradient || "#c9a227").split(",")[0].trim()}, transparent)`,
+       }} />
+       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+         <div>
+@@ -706,7 +706,7 @@ function DeployCard({ title, subtitle, meta, gradient, onDeploy, status, steps }
+           background: `linear-gradient(135deg, ${gradient})`, color: "#fff",
+           transition: "all 0.3s", letterSpacing: 0.3,
+-          boxShadow: `0 4px 20px ${(gradient || "#3b82f6").split(",")[0].trim()}30`,
++          boxShadow: `0 4px 20px ${(gradient || "#c9a227").split(",")[0].trim()}30`,
+           position: "relative", overflow: "hidden",
+         }}>
+           <span style={{ position: "relative", zIndex: 1 }}>Confirm & Deploy</span>
+@@ -777,7 +777,7 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest }) {
+       }}>
+         <div style={{
+           position: "absolute", top: 0, left: 0, right: 0, height: 2,
+-          background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.3), transparent)",
++          background: "linear-gradient(90deg, transparent, rgba(201,162,39,0.25), transparent)",
+         }} />
+         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+           <div style={{ color: "#f1f5f9", fontSize: 16, fontWeight: 700 }}>⚙️ Connection Settings</div>
+@@ -800,9 +800,9 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest })
+             {[{ label: "Demo", value: false, desc: "Simulated data" }, { label: "Live", value: true, desc: "Azure backend" }].map(m => (
+               <button key={m.label} onClick={() => setIsLive(m.value)} style={{
+                 flex: 1, padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+-                background: isLive === m.value ? "rgba(23,37,84,0.7)" : "rgba(15,26,46,0.5)",
++                background: isLive === m.value ? "rgba(42,36,22,0.8)" : "rgba(15,26,46,0.5)",
+                 backdropFilter: "blur(8px)",
+-                border: `1px solid ${isLive === m.value ? "rgba(59,130,246,0.5)" : "rgba(30,41,59,0.5)"}`,
+-                color: isLive === m.value ? "#60a5fa" : "#64748b", textAlign: "center",
++                border: `1px solid ${isLive === m.value ? "rgba(201,162,39,0.45)" : "rgba(30,41,59,0.5)"}`,
++                color: isLive === m.value ? "#d4a574" : "#64748b", textAlign: "center",
+                 transition: "all 0.2s ease",
+-                boxShadow: isLive === m.value ? "0 0 15px rgba(59,130,246,0.1)" : "none",
++                boxShadow: isLive === m.value ? "0 0 12px rgba(201,162,39,0.08)" : "none",
+               }}>
+                 <div style={{ fontWeight: 600, fontSize: 13 }}>{m.label}</div>
+                 <div style={{ fontSize: 10, marginTop: 2, opacity: 0.7 }}>{m.desc}</div>
+@@ -862,17 +862,17 @@ function WelcomeScreen({ onQuickAction, isLive }) {
+   return (
+     <div style={{ padding: "60px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100%" }}>
+       <div style={{
+-        width: 80, height: 80, borderRadius: 22, margin: "0 auto 28px",
+-        background: "linear-gradient(135deg, #1e40af, #3b82f6)",
++        width: 80, height: 80, borderRadius: 16, margin: "0 auto 28px",
++        background: "linear-gradient(135deg, #a67c00, #c9a227)",
+         display: "flex", alignItems: "center", justifyContent: "center", fontSize: 38,
+         animation: "logoGlow 3s ease-in-out infinite",
+       }}>🛡️</div>
+       <h2 style={{
+-        fontSize: 30, fontWeight: 800, margin: 0, letterSpacing: -0.5,
+-        background: "linear-gradient(135deg, #e2e8f0 0%, #60a5fa 50%, #e2e8f0 100%)",
+-        backgroundSize: "200% auto",
+-        WebkitBackgroundClip: "text",
+-        WebkitTextFillColor: "transparent",
+-        backgroundClip: "text",
+-        animation: "gradientShift 6s ease infinite",
++        fontSize: 30, fontWeight: 800, margin: 0, letterSpacing: -0.5,
++        color: "#f5f5f4",
+       }}>
+         Intune Command Center
+       </h2>
+@@ -908,17 +908,17 @@ function MessageBubble({ message }) {
+       {!isUser && (
+         <div style={{
+           width: 34, height: 34, borderRadius: 10, flexShrink: 0, marginRight: 12, marginTop: 2,
+-          background: "linear-gradient(135deg, #1e40af, #3b82f6)",
+-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+-          boxShadow: "0 0 12px rgba(59,130,246,0.2), 0 0 0 1px rgba(59,130,246,0.15)",
++          background: "linear-gradient(135deg, #a67c00, #c9a227)",
++          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
++          boxShadow: "0 4px 16px rgba(201,162,39,0.2), 0 0 0 1px rgba(201,162,39,0.1)",
+         }}>🛡️</div>
+       )}
+       <div style={{ maxWidth: "80%" }}>
+         <div style={{
+           padding: "14px 18px",
+-          borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
++          borderRadius: isUser ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+           background: isUser
+-            ? "linear-gradient(135deg, #1e40af, #2563eb, #4338ca)"
++            ? "linear-gradient(135deg, #a67c00, #c9a227)"
+             : "rgba(13,21,38,0.7)",
+           backdropFilter: isUser ? "none" : "blur(12px)",
+           WebkitBackdropFilter: isUser ? "none" : "blur(12px)",
+           border: isUser ? "none" : "1px solid rgba(24,36,65,0.6)",
+           color: "#e2e8f0", fontSize: 14, lineHeight: 1.7, whiteSpace: "pre-line",
+           boxShadow: isUser
+-            ? "0 4px 20px rgba(37,99,235,0.2), inset 0 1px 0 rgba(255,255,255,0.05)"
++            ? "0 4px 16px rgba(201,162,39,0.18), inset 0 1px 0 rgba(255,255,255,0.06)"
+             : "0 2px 12px rgba(0,0,0,0.15)",
+         }}>{message.text}</div>
+         {message.component && (
+-          <div style={{ marginTop: 8, borderLeft: "2px solid rgba(59,130,246,0.15)", paddingLeft: 0 }}>
++          <div style={{ marginTop: 8, borderLeft: "2px solid rgba(201,162,39,0.2)", paddingLeft: 0 }}>
+             {message.component}
+           </div>
+         )}
+
+@@ -1842,10 +1842,6 @@
+     <div style={{
+       width: "100%", height: "100vh",
+       display: "flex", flexDirection: "column",
+-      background: `
+-        radial-gradient(ellipse at 20% 0%, rgba(59,130,246,0.06) 0%, transparent 60%),
+-        radial-gradient(ellipse at 80% 100%, rgba(139,92,246,0.04) 0%, transparent 50%),
+-        #060b14`,
+-      fontFamily: "'Instrument Sans', 'SF Pro Display', -apple-system, sans-serif",
++      background: "#0c0c0e",
++      fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+       overflow: "hidden", position: "relative",
+     }}>
+       <style>{`
+@@ -1852,7 +1848,7 @@
+-        @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
++        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap');
+         @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-6px); opacity: 1; } }
+         @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+         @keyframes fadeSlideOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-8px); } }
+@@ -1855,7 +1851,7 @@
+         @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); } 50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.15); } }
++        @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(201,162,39,0); } 50% { box-shadow: 0 0 0 4px rgba(201,162,39,0.12); } }
+         @keyframes meshFloat {
+@@ -1868,12 +1864,12 @@
+         @keyframes glowPulse {
+-          0%, 100% { box-shadow: 0 0 15px rgba(59,130,246,0.05), 0 0 30px rgba(59,130,246,0); }
+-          50% { box-shadow: 0 0 15px rgba(59,130,246,0.1), 0 0 30px rgba(59,130,246,0.05); }
++          0%, 100% { box-shadow: 0 0 15px rgba(201,162,39,0.04), 0 0 30px rgba(201,162,39,0); }
++          50% { box-shadow: 0 0 15px rgba(201,162,39,0.08), 0 0 30px rgba(201,162,39,0.03); }
+         }
+         @keyframes logoGlow {
+-          0%, 100% { box-shadow: 0 12px 40px rgba(59,130,246,0.25), 0 0 0 0 rgba(59,130,246,0); }
+-          50% { box-shadow: 0 12px 40px rgba(59,130,246,0.3), 0 0 0 8px rgba(59,130,246,0.08); }
++          0%, 100% { box-shadow: 0 8px 28px rgba(201,162,39,0.15), 0 0 0 0 rgba(201,162,39,0); }
++          50% { box-shadow: 0 8px 28px rgba(201,162,39,0.2), 0 0 0 6px rgba(201,162,39,0.05); }
+         }
+         @keyframes gradientShift {
+@@ -1884,8 +1880,8 @@
+         * { box-sizing: border-box; margin: 0; padding: 0; }
+         html, body, #root { height: 100%; }
+-        ::selection { background: rgba(59,130,246,0.3); color: #e2e8f0; }
++        ::selection { background: rgba(201,162,39,0.25); color: #f5f5f4; }
+         ::-webkit-scrollbar { width: 5px; }
+         ::-webkit-scrollbar-track { background: transparent; }
+         ::-webkit-scrollbar-thumb { background: rgba(30,41,59,0.5); border-radius: 10px; }
+         ::-webkit-scrollbar-thumb:hover { background: rgba(51,65,85,0.6); }
+-        input:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.15), 0 0 20px rgba(59,130,246,0.1) !important; }
++        input:focus { border-color: #c9a227 !important; box-shadow: 0 0 0 2px rgba(201,162,39,0.2) !important; }
+      `}</style>
+
+@@ -1910,24 +1906,24 @@
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0, height: 1,
+-          background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.15), transparent)",
++          background: "linear-gradient(90deg, transparent, rgba(201,162,39,0.12), transparent)",
+         }} />
+         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 960, margin: "0 auto" }}>
+           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+             <div style={{
+-              width: 38, height: 38, borderRadius: 10,
+-              background: "linear-gradient(135deg, #1e40af, #3b82f6)",
++              width: 38, height: 38, borderRadius: 10,
++              background: "linear-gradient(135deg, #a67c00, #c9a227)",
+               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
+-              boxShadow: "0 4px 16px rgba(59,130,246,0.25), 0 0 0 1px rgba(59,130,246,0.1)",
++              boxShadow: "0 4px 16px rgba(201,162,39,0.2), 0 0 0 1px rgba(201,162,39,0.08)",
+             }}>🛡️</div>
+             <div>
+               <div style={{ color: "#f1f5f9", fontSize: 16, fontWeight: 700, letterSpacing: -0.3 }}>Intune Command Center</div>
+@@ -1936,8 +1932,8 @@
+                   transition: "all 0.2s", fontFamily: "inherit",
+                 }}
+-                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(59,130,246,0.4)"; e.currentTarget.style.color = "#e2e8f0"; e.currentTarget.style.background = "rgba(19,31,56,0.7)"; }}
++                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(201,162,39,0.4)"; e.currentTarget.style.color = "#e2e8f0"; e.currentTarget.style.background = "rgba(19,31,56,0.7)"; }}
+                 onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.background = "rgba(13,21,38,0.6)"; }}
+               >⌂ Home</button>
+             )}
+@@ -1966,8 +1962,8 @@
+               display: "flex", alignItems: "center", justifyContent: "center",
+               transition: "all 0.2s",
+             }}
+-              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(59,130,246,0.4)"; e.currentTarget.style.color = "#e2e8f0"; e.currentTarget.style.background = "rgba(19,31,56,0.7)"; }}
++              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(201,162,39,0.4)"; e.currentTarget.style.color = "#e2e8f0"; e.currentTarget.style.background = "rgba(19,31,56,0.7)"; }}
+               onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.background = "rgba(13,21,38,0.6)"; }}
+             >⚙️</button>
+           </div>
+@@ -1985,10 +1981,10 @@
+               {isTyping && (
+                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                   <div style={{
+-                    width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+-                    background: "linear-gradient(135deg, #1e40af, #3b82f6)",
+-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+-                    boxShadow: "0 0 12px rgba(59,130,246,0.2), 0 0 0 1px rgba(59,130,246,0.15)",
++                    width: 34, height: 34, borderRadius: 10, flexShrink: 0,
++                    background: "linear-gradient(135deg, #a67c00, #c9a227)",
++                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
++                    boxShadow: "0 4px 16px rgba(201,162,39,0.2), 0 0 0 1px rgba(201,162,39,0.1)",
+                   }}>🛡️</div>
+                   <div style={{
+                     padding: "10px 18px",
+@@ -2022,14 +2018,14 @@
+                   transition: "all 0.2s", fontWeight: 500, fontFamily: "inherit",
+                 }}
+                 onMouseEnter={e => {
+-                  e.target.style.borderColor = "rgba(59,130,246,0.4)";
++                  e.target.style.borderColor = "rgba(201,162,39,0.4)";
+                   e.target.style.color = "#e2e8f0";
+                   e.target.style.background = "rgba(19,31,56,0.7)";
+                   e.target.style.transform = "translateY(-1px)";
+-                  e.target.style.boxShadow = "0 4px 12px rgba(59,130,246,0.1)";
++                  e.target.style.boxShadow = "0 4px 12px rgba(201,162,39,0.08)";
+                 }}
+                 onMouseLeave={e => {
+                   e.target.style.borderColor = "rgba(24,36,65,0.6)";
+@@ -2052,14 +2048,14 @@
+       }}>
+         <div style={{
+           position: "absolute", top: 0, left: 0, right: 0, height: 1,
+-          background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.15), transparent)",
++          background: "linear-gradient(90deg, transparent, rgba(201,162,39,0.12), transparent)",
+         }} />
+         <div style={{ maxWidth: 960, margin: "0 auto" }}>
+           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+             <input value={input} onChange={e => setInput(e.target.value)}
+               onKeyDown={e => e.key === "Enter" && handleSend()}
+               placeholder="Deploy Chrome to all PCs, push latest update, check compliance..."
+               style={{
+-                flex: 1, padding: "14px 20px", borderRadius: 14,
++                flex: 1, padding: "14px 20px", borderRadius: 10,
+                 border: "1px solid rgba(24,36,65,0.8)",
+                 background: "rgba(13,21,38,0.8)",
+                 backdropFilter: "blur(8px)",
+@@ -2072,10 +2068,10 @@
+             <button onClick={handleSend} disabled={!input.trim() || isTyping}
+               style={{
+                 width: 48, height: 48, borderRadius: 14, border: "none",
+-                background: input.trim() && !isTyping ? "linear-gradient(135deg, #1e40af, #2563eb)" : "#182441",
++                background: input.trim() && !isTyping ? "linear-gradient(135deg, #a67c00, #c9a227)" : "#1a1a1a",
+                 color: input.trim() && !isTyping ? "#fff" : "#475569",
+                 fontSize: 18, cursor: input.trim() && !isTyping ? "pointer" : "not-allowed",
+                 display: "flex", alignItems: "center", justifyContent: "center",
+                 transition: "all 0.3s", flexShrink: 0,
+-                boxShadow: input.trim() && !isTyping ? "0 4px 20px rgba(37,99,235,0.25)" : "none",
++                boxShadow: input.trim() && !isTyping ? "0 4px 16px rgba(201,162,39,0.2)" : "none",
+               }}>↑</button>
+           </div>

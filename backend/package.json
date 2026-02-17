@@ -1,0 +1,17 @@
+{
+  "name": "intune-command-center-api",
+  "version": "1.0.0",
+  "description": "Intune Command Center backend API for Team 2",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^2.16.0",
+    "express": "^4.21.0",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
