@@ -11,6 +11,8 @@ const DIRECT_INSTALL = {
   "7zip.7zip": `$p="$env:TEMP\\7zipSetup.exe"; Invoke-WebRequest -Uri "https://www.7-zip.org/a/7z2408-x64.exe" -OutFile $p; Start-Process $p -Args "/S" -Wait; Remove-Item $p`,
   "Microsoft.VisualStudioCode": `$p="$env:TEMP\\VSCodeSetup.exe"; Invoke-WebRequest -Uri "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64" -OutFile $p; Start-Process $p -Args "/VERYSILENT /NORESTART" -Wait; Remove-Item $p`,
   "VideoLAN.VLC": `$p="$env:TEMP\\VLCSetup.exe"; Invoke-WebRequest -Uri "https://get.videolan.org/vlc/last/win64/vlc-3.0.21-win64.exe" -OutFile $p; Start-Process $p -Args "/S" -Wait; Remove-Item $p`,
+  "Adobe.Acrobat.Reader.64-bit": `$p="$env:TEMP\\AcroRdrSetup.exe"; Invoke-WebRequest -Uri "https://ardownload2.adobe.com/pub/adobe/reader/win/AcrobatDC/2300820555/AcroRdrDC2300820555_en_US.exe" -OutFile $p; Start-Process $p -Args "/sAll /rs /msi /norestart /quiet EULA_ACCEPT=YES" -Wait; Remove-Item $p`,
+  "Zoom.Zoom": `$p="$env:TEMP\\ZoomSetup.exe"; Invoke-WebRequest -Uri "https://zoom.us/client/latest/ZoomInstaller.exe" -OutFile $p; Start-Process $p -Args "/quiet /norestart" -Wait; Remove-Item $p`,
 };
 
 // GET /api/apps — List extensions (installed software/agents) on all machines
