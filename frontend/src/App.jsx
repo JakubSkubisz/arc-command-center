@@ -301,63 +301,46 @@ function ActionCard({ icon, title, subtitle, onClick }) {
 }
 
 function InfoBox({ color, borderColor, bg, children }) {
+  // map old dark colors to light equivalents
+  const isGreen = color === "#34d399";
+  const isRed   = color === "#f87171";
+  const cls = isGreen
+    ? "bg-emerald-50 border-l-emerald-500 border-emerald-200 text-emerald-800"
+    : isRed
+    ? "bg-red-50 border-l-red-500 border-red-200 text-red-700"
+    : "bg-amber-50 border-l-amber-500 border-amber-200 text-amber-800";
   return (
-    <div style={{
-      marginTop: 8, padding: "12px 16px",
-      background: bg,
-      border: `1px solid ${borderColor}`,
-      borderLeft: `3px solid ${color}`,
-      borderRadius: 3, color, fontSize: 12, lineHeight: 1.5,
-    }}>
+    <div className={`mt-2 px-4 py-3 rounded border border-l-4 text-xs leading-relaxed ${cls}`}>
       {children}
     </div>
   );
 }
 
-function StepProgress({ steps, gradient }) {
-  const accent = gradient ? gradient.split(",")[0].trim() : "#c9a227";
+function StepProgress({ steps }) {
   return (
-    <div style={{ marginTop: 14, padding: "2px 0" }}>
+    <div className="mt-3 space-y-0">
       {steps.map((step, i) => {
         const isLast = i === steps.length - 1;
-        const cfg = {
-          pending: { bg: "transparent", border: "#334155", icon: null, textColor: "#475569" },
-          active:  { bg: accent, border: accent, icon: "...", textColor: "#e2e8f0" },
-          done:    { bg: "#059669", border: "#059669", icon: "\u2713", textColor: "#34d399" },
-          error:   { bg: "#dc2626", border: "#dc2626", icon: "\u2717", textColor: "#f87171" },
-        }[step.status] || { bg: "transparent", border: "#334155", icon: null, textColor: "#475569" };
+        const dotCls = step.status === "done"  ? "bg-emerald-500 border-emerald-500"
+                     : step.status === "active" ? "bg-blue-500 border-blue-500"
+                     : step.status === "error"  ? "bg-red-500 border-red-500"
+                     : "bg-white border-slate-300";
+        const textCls = step.status === "done"  ? "text-emerald-700 font-medium"
+                      : step.status === "active" ? "text-blue-700 font-semibold"
+                      : step.status === "error"  ? "text-red-600"
+                      : "text-slate-400";
+        const icon = step.status === "done" ? "✓" : step.status === "error" ? "✗" : step.status === "active" ? "…" : "";
         return (
-          <div key={step.key || i} style={{ display: "flex", alignItems: "flex-start" }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginRight: 12, flexShrink: 0 }}>
-              <div style={{
-                width: 22, height: 22, borderRadius: "50%",
-                background: step.status === "pending" ? "rgba(15,26,46,0.8)" : cfg.bg,
-                border: `2px solid ${cfg.border}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 10, fontWeight: 700, color: "#fff",
-                transition: "all 0.3s ease",
-              }}>{cfg.icon}</div>
-              {!isLast && (
-                <div style={{
-                  width: 2, minHeight: 20, flex: 1,
-                  background: step.status === "done" ? "#059669" : "#1e293b",
-                  transition: "background 0.3s ease",
-                }} />
-              )}
+          <div key={step.key || i} className="flex items-start">
+            <div className="flex flex-col items-center mr-3 shrink-0">
+              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-white text-xs font-bold transition-all ${dotCls}`}>
+                {icon}
+              </div>
+              {!isLast && <div className={`w-0.5 min-h-[18px] flex-1 transition-colors ${step.status === "done" ? "bg-emerald-300" : "bg-slate-200"}`} />}
             </div>
-            <div style={{
-              flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center",
-              paddingBottom: isLast ? 0 : 14, minHeight: 32,
-            }}>
-              <span style={{
-                fontSize: 12, fontWeight: step.status === "active" ? 600 : 400,
-                color: cfg.textColor, transition: "all 0.3s ease",
-              }}>{step.label}</span>
-              {step.timestamp && (
-                <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono', monospace", color: "#475569", marginLeft: 12 }}>
-                  {step.timestamp}
-                </span>
-              )}
+            <div className={`flex-1 flex justify-between items-center pb-3.5 min-h-[28px] ${isLast ? "pb-0" : ""}`}>
+              <span className={`text-xs transition-all ${textCls}`}>{step.label}</span>
+              {step.timestamp && <span className="text-xs font-mono text-slate-400 ml-3">{step.timestamp}</span>}
             </div>
           </div>
         );
@@ -370,46 +353,24 @@ function LiveActionTracker({ actionLabel, deviceStates, totalCount, completedCou
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
   const allDone = completedCount === totalCount;
   return (
-    <div style={{
-      marginTop: 10,
-      background: "#0c1524",
-      border: "1px solid #1a2740",
-      borderRadius: 4, padding: 16,
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{actionLabel} Progress</span>
-        <span style={{ color: "#64748b", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>
-          {completedCount}/{totalCount} ({pct}%)
-        </span>
+    <div className="mt-2 border border-slate-200 rounded-lg p-4 bg-white">
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-slate-800 text-sm font-semibold">{actionLabel} Progress</span>
+        <span className="text-slate-400 text-xs font-mono">{completedCount}/{totalCount} ({pct}%)</span>
       </div>
-      <div style={{ width: "100%", height: 6, background: "#1e293b", borderRadius: 99, overflow: "hidden", position: "relative" }}>
-        <div style={{
-          height: "100%", borderRadius: 99,
-          background: allDone
-            ? "linear-gradient(90deg, #059669, #34d399)"
-            : "linear-gradient(90deg, #a67c00, #c9a227)",
-          width: `${pct}%`, transition: "width 0.4s ease",
-          position: "relative", overflow: "hidden",
-        }}>
-
-        </div>
+      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-500 ${allDone ? "bg-emerald-500" : "bg-blue-500"}`}
+          style={{ width: `${pct}%` }} />
       </div>
-      <div style={{ marginTop: 12, maxHeight: 200, overflowY: "auto" }}>
+      <div className="mt-3 max-h-48 overflow-y-auto space-y-1">
         {deviceStates.map(d => (
-          <div key={d.id} style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "6px 0", borderBottom: "1px solid #111827",
-          }}>
-            <span style={{
-              fontSize: 12, fontFamily: "'JetBrains Mono', monospace",
-              color: d.status === "success" ? "#34d399" : d.status === "error" ? "#f87171" : d.status === "processing" ? "#e2e8f0" : "#475569",
-              fontWeight: d.status === "processing" ? 600 : 400,
-            }}>{d.name}</span>
-            <span style={{ fontSize: 11, minWidth: 24, textAlign: "right" }}>
-              {d.status === "pending" && <span style={{ color: "#334155" }}>--</span>}
-              {d.status === "processing" && <span style={{ color: "#d4a574", animation: "typingBounce 1s infinite" }}>...</span>}
-              {d.status === "success" && <span style={{ color: "#34d399" }}>{"\u2713"}</span>}
-              {d.status === "error" && <span style={{ color: "#f87171" }}>{"\u2717"}</span>}
+          <div key={d.id} className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
+            <span className={`text-xs font-mono ${d.status === "processing" ? "text-blue-700 font-semibold" : d.status === "success" ? "text-emerald-700" : d.status === "error" ? "text-red-600" : "text-slate-500"}`}>{d.name}</span>
+            <span className="text-xs text-right min-w-5">
+              {d.status === "pending" && <span className="text-slate-300">—</span>}
+              {d.status === "processing" && <span className="text-blue-500">…</span>}
+              {d.status === "success" && <span className="text-emerald-500">✓</span>}
+              {d.status === "error" && <span className="text-red-500">✗</span>}
             </span>
           </div>
         ))}
@@ -421,88 +382,53 @@ function LiveActionTracker({ actionLabel, deviceStates, totalCount, completedCou
 function DeviceTable({ devices, onAction, selectable, selected, onSelect }) {
   const allSelected = selectable && selected && devices.length > 0 && devices.every(d => selected.includes(d.id));
   const someSelected = selectable && selected && selected.length > 0 && !allSelected;
-  const toggleAll = () => {
-    if (!onSelect) return;
-    if (allSelected) onSelect([]);
-    else onSelect(devices.map(d => d.id));
-  };
-  const toggleOne = (id) => {
-    if (!onSelect) return;
-    if (selected.includes(id)) onSelect(selected.filter(s => s !== id));
-    else onSelect([...selected, id]);
-  };
-
-  const checkboxStyle = (checked) => ({
-    width: 16, height: 16, borderRadius: 4, cursor: "pointer",
-    border: checked ? "none" : "2px solid #334155",
-    background: checked ? "#a67c00" : "transparent",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    flexShrink: 0, transition: "all 0.15s ease",
-  });
+  const toggleAll = () => { if (!onSelect) return; allSelected ? onSelect([]) : onSelect(devices.map(d => d.id)); };
+  const toggleOne = (id) => { if (!onSelect) return; selected.includes(id) ? onSelect(selected.filter(s => s !== id)) : onSelect([...selected, id]); };
 
   return (
-    <div style={{ overflowX: "auto", borderRadius: 4, border: "1px solid rgba(30,41,59,0.5)", marginTop: 8 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+    <div className="overflow-x-auto rounded-lg border border-slate-200 mt-2">
+      <table className="w-full border-collapse text-xs">
         <thead>
-          <tr style={{ background: "#0c1524" }}>
+          <tr className="bg-slate-50">
             {selectable && (
-              <th style={{ padding: "10px 10px 10px 14px", borderBottom: "1px solid #1e293b", width: 36 }}>
-                <div onClick={toggleAll} style={checkboxStyle(allSelected)}>
-                  {allSelected && <span style={{ color: "#fff", fontSize: 10, fontWeight: 800 }}>✓</span>}
-                  {someSelected && !allSelected && <span style={{ color: "#fff", fontSize: 10 }}>—</span>}
+              <th className="px-3 py-2.5 border-b border-slate-200 w-8">
+                <div onClick={toggleAll} className={`w-4 h-4 rounded cursor-pointer border-2 flex items-center justify-center transition-all ${allSelected ? "bg-blue-600 border-blue-600" : "border-slate-300 bg-white"}`}>
+                  {allSelected && <span className="text-white text-xs font-bold leading-none">✓</span>}
+                  {someSelected && !allSelected && <span className="text-slate-400 text-xs leading-none">—</span>}
                 </div>
               </th>
             )}
-            {["Device", "User", "OS", "Status", "Last Sync", ...(onAction ? ["Actions"] : [])].map(h => (
-              <th key={h} style={{
-                padding: "10px 14px", textAlign: "left", color: "#64748b",
-                fontWeight: 600, fontSize: 10, textTransform: "uppercase",
-                letterSpacing: 0.8, borderBottom: "1px solid #1e293b",
-              }}>{h}</th>
+            {["Device", "OS", "Status", "Last Sync", ...(onAction ? ["Actions"] : [])].map(h => (
+              <th key={h} className="px-3 py-2.5 text-left text-slate-500 font-semibold uppercase tracking-wider border-b border-slate-200">{h}</th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="bg-white divide-y divide-slate-100">
           {devices.map((d, i) => {
             const isChecked = selectable && selected && selected.includes(d.id);
             return (
               <tr key={d.id || i} onClick={() => selectable && toggleOne(d.id)}
-                style={{
-                  borderBottom: "1px solid rgba(30,41,59,0.4)", cursor: selectable ? "pointer" : "default",
-                  background: isChecked ? "rgba(15,29,58,0.8)" : "transparent",
-                  transition: "all 0.15s ease",
-                }}
-                onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = "rgba(15,26,46,0.5)"; }}
-                onMouseLeave={e => { if (!isChecked) e.currentTarget.style.background = "transparent"; }}
-              >
+                className={`transition-colors ${selectable ? "cursor-pointer" : ""} ${isChecked ? "bg-blue-50" : "hover:bg-slate-50"}`}>
                 {selectable && (
-                  <td style={{ padding: "10px 10px 10px 14px", width: 36 }}>
-                    <div style={checkboxStyle(isChecked)}>
-                      {isChecked && <span style={{ color: "#fff", fontSize: 10, fontWeight: 800 }}>✓</span>}
+                  <td className="px-3 py-2.5">
+                    <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${isChecked ? "bg-blue-600 border-blue-600" : "border-slate-300 bg-white"}`}>
+                      {isChecked && <span className="text-white text-xs font-bold leading-none">✓</span>}
                     </div>
                   </td>
                 )}
-                <td style={{ padding: "10px 14px", color: "#e2e8f0", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }}>{d.name}</td>
-                <td style={{ padding: "10px 14px", color: "#94a3b8" }}>{d.user}</td>
-                <td style={{ padding: "10px 14px", color: "#94a3b8" }}>{d.os}</td>
-                <td style={{ padding: "10px 14px" }}><StatusBadge status={d.status} /></td>
-                <td style={{ padding: "10px 14px", color: "#64748b" }}>{d.lastSync}</td>
+                <td className="px-3 py-2.5 font-mono font-medium text-slate-800">{d.name}</td>
+                <td className="px-3 py-2.5 text-slate-500">{d.os}</td>
+                <td className="px-3 py-2.5"><StatusBadge status={d.status} /></td>
+                <td className="px-3 py-2.5 text-slate-400">{d.lastSync}</td>
                 {onAction && (
-                  <td style={{ padding: "10px 14px" }}>
-                    <div style={{ display: "flex", gap: 4 }}>
+                  <td className="px-3 py-2.5">
+                    <div className="flex gap-1">
                       {[{ label: "⟳", action: "sync", title: "Sync" }, { label: "↻", action: "reboot", title: "Restart" }].map(a => (
                         <button key={a.action} title={a.title}
                           onClick={(e) => { e.stopPropagation(); onAction(d.id, d.name, a.action); }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(201,162,39,0.4)"; e.currentTarget.style.color = "#d4a574"; e.currentTarget.style.boxShadow = "0 0 12px rgba(201,162,39,0.12)"; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.boxShadow = "none"; }}
-                          style={{
-                            width: 28, height: 28, borderRadius: 3,
-                            border: "1px solid rgba(30,41,59,0.5)",
-                            background: "#0c1524",
-                            color: "#94a3b8", cursor: "pointer", fontSize: 13,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            transition: "all 0.2s ease",
-                          }}>{a.label}</button>
+                          className="w-7 h-7 rounded border border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all flex items-center justify-center text-sm">
+                          {a.label}
+                        </button>
                       ))}
                     </div>
                   </td>
@@ -517,44 +443,26 @@ function DeviceTable({ devices, onAction, selectable, selected, onSelect }) {
 }
 
 function BulkActionBar({ count, onSync, onReboot, onWipe, onRetire, onClear, busy }) {
-  const btnBase = {
-    padding: "7px 14px", borderRadius: 8, border: "1px solid transparent", fontWeight: 600,
-    fontSize: 12, cursor: busy ? "not-allowed" : "pointer", transition: "all 0.2s",
-    opacity: busy ? 0.5 : 1, display: "flex", alignItems: "center", gap: 5,
-  };
+  const op = busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer";
   return (
-    <div style={{
-      marginTop: 10, padding: "12px 16px",
-      background: "#0c1524",
-      border: "1px solid rgba(201,162,39,0.25)", borderRadius: 3,
-      display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8,
-      animation: "fadeSlideIn 0.2s ease",
-      position: "relative", overflow: "hidden",
-    }}>
-      <div style={{ color: "#e2e8f0", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{
-          background: "#a67c00", color: "#fff",
-          borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700,
-        }}>{count}</span>
+    <div className="mt-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between flex-wrap gap-3 fade-in">
+      <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+        <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{count}</span>
         device{count !== 1 ? "s" : ""} selected
-        <button onClick={onClear} style={{
-          background: "none", border: "none", color: "#64748b", cursor: "pointer",
-          fontSize: 11, textDecoration: "underline",
-        }}>Clear</button>
+        <button onClick={onClear} className="text-slate-400 hover:text-slate-600 text-xs underline ml-1">Clear</button>
       </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <button onClick={onSync} disabled={busy} style={{ ...btnBase, background: "#2a2416", color: "#d4a574" }}>
-          ⟳ Sync
-        </button>
-        <button onClick={onReboot} disabled={busy} style={{ ...btnBase, background: "#3b2e10", color: "#fbbf24" }}>
-          ↻ Restart
-        </button>
-        <button onClick={onRetire} disabled={busy} style={{ ...btnBase, background: "#2d1a2e", color: "#c084fc" }}>
-          ⏏ Retire
-        </button>
-        <button onClick={onWipe} disabled={busy} style={{ ...btnBase, background: "#3b1118", color: "#f87171" }}>
-          ⚠ Wipe
-        </button>
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { label: "⟳ Sync",    fn: onSync,   cls: "bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600" },
+          { label: "↻ Restart", fn: onReboot, cls: "bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:text-blue-600" },
+          { label: "⏏ Retire",  fn: onRetire, cls: "bg-white border-slate-200 text-slate-600 hover:border-purple-300 hover:text-purple-600" },
+          { label: "⚠ Wipe",   fn: onWipe,   cls: "bg-white border-red-200 text-red-500 hover:border-red-400 hover:bg-red-50" },
+        ].map(b => (
+          <button key={b.label} onClick={b.fn} disabled={busy}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${b.cls} ${op}`}>
+            {b.label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -579,28 +487,18 @@ function TargetSelector({ devices, preSelected, onConfirm, actionLabel, gradient
     onConfirm(selectedDevices, mode === "all");
   };
 
-  const accent = gradient ? gradient.split(",")[0].trim() : "#c9a227";
-
   if (confirmed) {
     const isAll = mode === "all";
     return (
-      <div style={{
-        marginTop: 8, padding: "10px 16px",
-        background: "#0c1524",
-        border: "1px solid #1a2740",
-        borderRadius: 4,
-        display: "flex", alignItems: "center", gap: 8,
-        animation: "fadeSlideIn 0.3s ease",
-      }}>
-        <span style={{ color: accent, fontSize: 14 }}>✓</span>
-        <span style={{ color: "#94a3b8", fontSize: 12 }}>
-          Targeting: {isAll ? (
-            <span style={{ color: "#e2e8f0", fontWeight: 600 }}>All Devices ({devices.length})</span>
-          ) : (
-            <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{selected.length} device{selected.length !== 1 ? "s" : ""}</span>
-          )}
+      <div className="mt-2 px-4 py-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 fade-in">
+        <span className="text-emerald-600 font-bold">✓</span>
+        <span className="text-slate-600 text-sm">
+          Targeting:{" "}
+          <span className="font-semibold text-slate-800">
+            {isAll ? `All Devices (${devices.length})` : `${selected.length} device${selected.length !== 1 ? "s" : ""}`}
+          </span>
           {!isAll && selected.length <= 3 && (
-            <span style={{ color: "#64748b", marginLeft: 6, fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+            <span className="text-slate-400 font-mono text-xs ml-2">
               ({devices.filter(d => selected.includes(d.id)).map(d => d.name).join(", ")})
             </span>
           )}
@@ -610,50 +508,25 @@ function TargetSelector({ devices, preSelected, onConfirm, actionLabel, gradient
   }
 
   return (
-    <div style={{
-      marginTop: 8,
-      background: "#0c1524",
-      border: "1px solid #1a2740",
-      borderRadius: 4, padding: 16,
-      animation: "fadeSlideIn 0.3s ease",
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, color: "#475569" }}>Select target devices</span>
-          <span style={{
-            background: accent, color: "#fff", borderRadius: 6,
-            padding: "2px 8px", fontSize: 11, fontWeight: 700,
-          }}>{selected.length}</span>
-        </div>
+    <div className="mt-2 border border-slate-200 rounded-lg p-4 bg-white fade-in">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs uppercase tracking-wider font-semibold text-slate-500">Select target devices</span>
+        <span className="bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{selected.length}</span>
       </div>
-
-      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+      <div className="flex gap-2 mb-3">
         {[{ key: "all", label: "All Devices" }, { key: "specific", label: "Select Specific" }].map(opt => (
-          <button key={opt.key} onClick={() => handleModeToggle(opt.key)} style={{
-            padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer",
-            border: `1px solid ${mode === opt.key ? accent + "80" : "rgba(30,41,59,0.5)"}`,
-            background: mode === opt.key ? accent + "20" : "rgba(15,26,46,0.5)",
-            color: mode === opt.key ? "#e2e8f0" : "#64748b",
-            transition: "all 0.2s ease",
-          }}>{opt.label}</button>
+          <button key={opt.key} onClick={() => handleModeToggle(opt.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${mode === opt.key ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"}`}>
+            {opt.label}
+          </button>
         ))}
       </div>
-
       {mode === "specific" && (
         <DeviceTable devices={devices} selectable={true} selected={selected} onSelect={setSelected} />
       )}
-
-      <button onClick={handleConfirm} disabled={selected.length === 0} style={{
-        marginTop: 12, width: "100%", padding: "10px 0", borderRadius: 3, border: "none",
-        fontWeight: 600, fontSize: 13, cursor: selected.length > 0 ? "pointer" : "not-allowed",
-        background: selected.length > 0 ? accent : "#1e293b",
-        color: selected.length > 0 ? "#fff" : "#475569",
-        transition: "all 0.15s", letterSpacing: 0.3,
-        opacity: selected.length === 0 ? 0.5 : 1,
-      }}>
-        <span style={{ position: "relative", zIndex: 1 }}>
-          {actionLabel ? `Confirm Targets & ${actionLabel}` : "Confirm Targets"} ({selected.length} device{selected.length !== 1 ? "s" : ""})
-        </span>
+      <button onClick={handleConfirm} disabled={selected.length === 0}
+        className={`mt-3 w-full py-2.5 rounded-lg text-sm font-semibold transition-all ${selected.length > 0 ? "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}>
+        {actionLabel ? `Confirm & ${actionLabel}` : "Confirm Targets"} ({selected.length} device{selected.length !== 1 ? "s" : ""})
       </button>
     </div>
   );
@@ -661,49 +534,31 @@ function TargetSelector({ devices, preSelected, onConfirm, actionLabel, gradient
 
 function DeployCard({ title, subtitle, meta, gradient, onDeploy, status, steps }) {
   return (
-    <div style={{
-      background: "#0c1524",
-      border: "1px solid #1a2740",
-      borderRadius: 4, padding: 18, marginTop: 8,
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+    <div className="border border-slate-200 rounded-lg p-4 mt-2 bg-white shadow-sm">
+      <div className="flex justify-between items-start mb-1">
         <div>
-          <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 15 }}>{title}</div>
-          <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>{subtitle}</div>
-          {meta && <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>{meta}</div>}
+          <div className="text-slate-900 font-bold text-sm">{title}</div>
+          <div className="text-slate-500 text-xs mt-1">{subtitle}</div>
+          {meta && <div className="text-slate-400 text-xs mt-0.5">{meta}</div>}
         </div>
         <StatusBadge status={status === "deployed" ? "Deployed" : status === "deploying" ? "Queued" : status === "error" ? "Error" : "Pending"} />
       </div>
       {status === "idle" && (
-        <button onClick={onDeploy} style={{
-          marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 3, border: "none",
-          fontWeight: 600, fontSize: 13, cursor: "pointer",
-          background: (gradient || "#c9a227").split(",")[0].trim(), color: "#fff",
-          transition: "all 0.15s", letterSpacing: 0.3,
-        }}>
+        <button onClick={onDeploy}
+          className="mt-3 w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-all cursor-pointer">
           Confirm & Deploy
         </button>
       )}
       {status === "deploying" && (
         steps && steps.length > 0
-          ? <StepProgress steps={steps} gradient={gradient} />
-          : <div style={{ marginTop: 14, padding: "10px 0", textAlign: "center", color: "#64748b", fontSize: 13 }}>
-              <span style={{ animation: "typingBounce 1s infinite" }}>...</span> Calling Azure ARM API...
-            </div>
+          ? <StepProgress steps={steps} />
+          : <div className="mt-3 text-center text-slate-500 text-sm py-2">Calling Azure ARM API...</div>
       )}
-      {status === "deployed" && (
+      {(status === "deployed" || status === "error") && (
         <div>
-          {steps && steps.length > 0 && <StepProgress steps={steps} gradient={gradient} />}
-          <InfoBox color="#34d399" borderColor="#166534" bg="#0d3320">
-            Deployment successful. Devices will apply changes on next sync cycle.
-          </InfoBox>
-        </div>
-      )}
-      {status === "error" && (
-        <div>
-          {steps && steps.length > 0 && <StepProgress steps={steps} gradient={gradient} />}
-          <InfoBox color="#f87171" borderColor="#7f1d1d" bg="#3b1118">
-            Deployment failed. Check API connection and permissions.
+          {steps && steps.length > 0 && <StepProgress steps={steps} />}
+          <InfoBox color={status === "deployed" ? "#34d399" : "#f87171"} borderColor="" bg="">
+            {status === "deployed" ? "✓ Deployment successful. Devices will apply changes on next sync cycle." : "✗ Deployment failed. Check API connection and permissions."}
           </InfoBox>
         </div>
       )}
@@ -724,87 +579,54 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest }
   };
 
   return (
-    <div style={{
-      position: "fixed", inset: 0,
-      background: "rgba(0,0,0,0.7)",
-      zIndex: 100,
-      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-    }}>
-      <div style={{
-        background: "#0c1524",
-        border: "1px solid rgba(30,41,59,0.5)",
-        borderRadius: 4, padding: 24, width: "100%", maxWidth: 440,
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ color: "#f1f5f9", fontSize: 16, fontWeight: 700 }}>⚙️ Connection Settings</div>
-          <button onClick={onClose} style={{
-            background: "none", border: "none", color: "#64748b", fontSize: 20, cursor: "pointer",
-            transition: "all 0.2s", lineHeight: 1,
-          }}
-            onMouseEnter={e => { e.currentTarget.style.color = "#e2e8f0"; e.currentTarget.style.transform = "scale(1.1)"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "#64748b"; e.currentTarget.style.transform = "scale(1)"; }}
-          >×</button>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md border border-slate-200">
+        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100">
+          <h2 className="text-slate-900 font-bold text-base">Connection Settings</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none transition-colors">×</button>
         </div>
 
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
-            Mode
-          </label>
-          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            {[{ label: "Demo", value: false, desc: "Simulated data" }, { label: "Live", value: true, desc: "Azure backend" }].map(m => (
-              <button key={m.label} onClick={() => setIsLive(m.value)} style={{
-                flex: 1, padding: "10px 14px", borderRadius: 3, cursor: "pointer",
-                background: isLive === m.value ? "#2a2416" : "#0f1a2e",
-                border: `1px solid ${isLive === m.value ? "rgba(201,162,39,0.45)" : "rgba(30,41,59,0.5)"}`,
-                color: isLive === m.value ? "#d4a574" : "#64748b", textAlign: "center",
-                transition: "all 0.15s ease",
-              }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{m.label}</div>
-                <div style={{ fontSize: 10, marginTop: 2, opacity: 0.7 }}>{m.desc}</div>
-              </button>
-            ))}
+        <div className="p-6 space-y-5">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Mode</label>
+            <div className="flex gap-2">
+              {[{ label: "Demo", value: false, desc: "Simulated data" }, { label: "Live", value: true, desc: "Azure backend" }].map(m => (
+                <button key={m.label} onClick={() => setIsLive(m.value)}
+                  className={`flex-1 py-2.5 px-4 rounded-xl border text-center transition-all ${isLive === m.value ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>
+                  <div className="font-semibold text-sm">{m.label}</div>
+                  <div className="text-xs opacity-70 mt-0.5">{m.desc}</div>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div style={{ marginBottom: 16, opacity: isLive ? 1 : 0.4, pointerEvents: isLive ? "auto" : "none" }}>
-          <label style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
-            Azure API Base URL
-          </label>
-          <input value={apiUrl} onChange={e => setApiUrl(e.target.value)}
-            placeholder="https://your-app.azurewebsites.net/api"
-            style={{
-              width: "100%", padding: "10px 14px", borderRadius: 3, marginTop: 6,
-              border: "1px solid #1e293b", background: "#111827", color: "#e2e8f0",
-              fontSize: 13, outline: "none", fontFamily: "'JetBrains Mono', monospace",
-            }} />
-        </div>
+          <div className={isLive ? "" : "opacity-40 pointer-events-none"}>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Azure API Base URL</label>
+            <input value={apiUrl} onChange={e => setApiUrl(e.target.value)}
+              placeholder="https://your-app.azurewebsites.net/api"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm font-mono text-slate-800 bg-white placeholder-slate-400" />
+          </div>
 
-        {isLive && (
-          <button onClick={runTest} disabled={testing} style={{
-            width: "100%", padding: "10px 0", borderRadius: 3, border: "1px solid #1e293b",
-            background: "#0f1a2e", color: "#94a3b8", fontSize: 13, fontWeight: 600,
-            cursor: testing ? "not-allowed" : "pointer", marginBottom: 12,
-          }}>
-            {testing ? "Testing connection..." : "🔌 Test Connection"}
-          </button>
-        )}
+          {isLive && (
+            <button onClick={runTest} disabled={testing}
+              className="w-full py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:border-blue-300 hover:text-blue-600 transition-all bg-white disabled:opacity-50">
+              {testing ? "Testing..." : "🔌 Test Connection"}
+            </button>
+          )}
 
-        {testResult && (
-          <InfoBox
-            color={testResult.ok ? "#34d399" : "#f87171"}
-            borderColor={testResult.ok ? "#166534" : "#7f1d1d"}
-            bg={testResult.ok ? "#0d3320" : "#3b1118"}
-          >
-            {testResult.ok ? `✓ Connected: ${testResult.service}` : `✗ ${testResult.error}`}
-          </InfoBox>
-        )}
+          {testResult && (
+            <InfoBox color={testResult.ok ? "#34d399" : "#f87171"} borderColor="" bg="">
+              {testResult.ok ? `✓ Connected: ${testResult.service}` : `✗ ${testResult.error}`}
+            </InfoBox>
+          )}
 
-        <div style={{ marginTop: 16, padding: "12px 14px", background: "#0f1a2e", border: "1px solid #1e293b", borderRadius: 3, color: "#64748b", fontSize: 11, lineHeight: 1.6 }}>
-          <strong style={{ color: "#94a3b8" }}>Setup required for Live mode:</strong><br />
-          1. Deploy the Node.js backend to Azure App Service<br />
-          2. Register an Entra ID app with ARM permissions (Azure Connected Machine Contributor)<br />
-          3. Set CLIENT_ID, TENANT_ID, CLIENT_SECRET, AZURE_SUBSCRIPTION_ID in App Service config<br />
-          4. Enter your App Service URL above
+          <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-xs text-slate-500 leading-relaxed">
+            <strong className="text-slate-700">Live mode setup:</strong><br />
+            1. Deploy the Node.js backend to Azure App Service<br />
+            2. Register an Entra ID app with ARM permissions<br />
+            3. Set CLIENT_ID, TENANT_ID, CLIENT_SECRET, SUBSCRIPTION_ID<br />
+            4. Enter your App Service URL above
+          </div>
         </div>
       </div>
     </div>
@@ -1257,7 +1079,7 @@ export default function ArcChat() {
                   <div>
                     <LiveActionTracker actionLabel="Sync" deviceStates={deviceStates} totalCount={targetDevices.length} completedCount={completed} />
                     {finished && (
-                      <InfoBox color="#d4a574" borderColor="#4a3a1a" bg="#2a2416">
+                      <InfoBox color="#34d399" borderColor="" bg="">
                         {deviceStates.filter(d => d.status === "success").length} device{targetDevices.length !== 1 ? "s" : ""} synced. Check-in results will appear within 15 minutes.
                       </InfoBox>
                     )}
@@ -1327,26 +1149,18 @@ export default function ArcChat() {
                     gradient={isWipe ? "#dc2626, #ef4444" : "#7c3aed, #8b5cf6"}
                   />
                   {targetConfirmed && !result && (
-                    <div style={{ marginTop: 8 }}>
-                      <InfoBox color="#fbbf24" borderColor="#78350f" bg="#3b2e10">
+                    <div className="mt-2">
+                      <InfoBox color="#f87171" borderColor="" bg="">
                         ⚠️ {actionName === "Wipe" ? "Factory reset" : "Company data removal"} will be executed on {targetDevices.length} device{targetDevices.length !== 1 ? "s" : ""}. This action cannot be undone.
                       </InfoBox>
-                      <button onClick={handleExecute} disabled={executing} style={{
-                        marginTop: 10, width: "100%", padding: "10px 0", borderRadius: 8, border: "none",
-                        fontWeight: 600, fontSize: 13, cursor: executing ? "not-allowed" : "pointer",
-                        background: isWipe ? "#dc2626" : "#7c3aed",
-                        color: "#fff", opacity: executing ? 0.6 : 1,
-                      }}>
+                      <button onClick={handleExecute} disabled={executing}
+                        className={`mt-2 w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-all ${executing ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} ${isWipe ? "bg-red-600 hover:bg-red-700" : "bg-purple-600 hover:bg-purple-700"}`}>
                         {executing ? `${actionName}ing...` : `Confirm ${actionName} (${targetDevices.length} device${targetDevices.length !== 1 ? "s" : ""})`}
                       </button>
                     </div>
                   )}
                   {result && (
-                    <InfoBox
-                      color={result.fail === 0 ? "#34d399" : "#f87171"}
-                      borderColor={result.fail === 0 ? "#166534" : "#7f1d1d"}
-                      bg={result.fail === 0 ? "#0d3320" : "#3b1118"}
-                    >
+                    <InfoBox color={result.fail === 0 ? "#34d399" : "#f87171"} borderColor="" bg="">
                       {actionName} complete: {result.ok} succeeded{result.fail > 0 ? `, ${result.fail} failed` : ""} out of {result.total} device{result.total !== 1 ? "s" : ""}.
                     </InfoBox>
                   )}
@@ -1403,7 +1217,7 @@ export default function ArcChat() {
                   <div>
                     <LiveActionTracker actionLabel="Restart" deviceStates={deviceStates} totalCount={targetDevices.length} completedCount={completed} />
                     {finished && (
-                      <InfoBox color="#fbbf24" borderColor="#78350f" bg="#3b2e10">
+                      <InfoBox color="#34d399" borderColor="" bg="">
                         {deviceStates.filter(d => d.status === "success").length} device{targetDevices.length !== 1 ? "s" : ""} will restart within the next maintenance window. Users receive a 15-minute warning.
                       </InfoBox>
                     )}
@@ -1631,12 +1445,12 @@ export default function ArcChat() {
                   />
                 )}
                 {actionMsg && (
-                  <InfoBox color={actionMsg.ok ? "#34d399" : "#f87171"} borderColor={actionMsg.ok ? "#166534" : "#7f1d1d"} bg={actionMsg.ok ? "#0d3320" : "#3b1118"}>
+                  <InfoBox color={actionMsg.ok ? "#34d399" : "#f87171"} borderColor="" bg="">
                     {actionMsg.text}
                   </InfoBox>
                 )}
                 {nonCompliantNames && (
-                  <InfoBox color="#94a3b8" borderColor="#1e293b" bg="#0f1a2e">
+                  <InfoBox color="#94a3b8" borderColor="" bg="">
                     💡 Non-compliant: {nonCompliantNames}. Select them above and hit Sync to push a check-in.
                   </InfoBox>
                 )}
@@ -1659,29 +1473,24 @@ export default function ArcChat() {
           addBot(
             `${isLive ? "Live" : "Demo"} Arc dashboard from Azure ARM:`,
             <div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+              <div className="grid grid-cols-2 gap-2 mt-2">
                 {[
-                  { label: "Arc Machines", value: total, icon: "💻", color: "#d4a574" },
-                  { label: "Non-Compliant", value: nonCompliant, icon: "⚠️", color: nonCompliant > 0 ? "#f87171" : "#34d399" },
-                  { label: "Compliant", value: compliance.summary.compliant, icon: "✅", color: "#34d399" },
-                  { label: "Grace Period", value: compliance.summary.inGracePeriod, icon: "⏳", color: "#fbbf24" },
+                  { label: "Arc Machines", value: total, icon: "💻", cls: "text-blue-700" },
+                  { label: "Non-Compliant", value: nonCompliant, icon: "⚠️", cls: nonCompliant > 0 ? "text-red-600" : "text-emerald-600" },
+                  { label: "Compliant", value: compliance.summary.compliant, icon: "✅", cls: "text-emerald-600" },
+                  { label: "Grace Period", value: compliance.summary.inGracePeriod, icon: "⏳", cls: "text-amber-600" },
                 ].map(s => (
-                  <div key={s.label} style={{
-                    background: "#0c1524", border: "1px solid #1a2740",
-                    borderRadius: 4, padding: "14px 16px",
-                    display: "flex", alignItems: "center", gap: 12,
-                    transition: "all 0.2s ease",
-                  }}>
-                    <span style={{ fontSize: 22 }}>{s.icon}</span>
+                  <div key={s.label} className="border border-slate-200 rounded-lg p-3 bg-white flex items-center gap-3">
+                    <span className="text-xl">{s.icon}</span>
                     <div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
-                      <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>{s.label}</div>
+                      <div className={`text-xl font-extrabold ${s.cls}`}>{s.value}</div>
+                      <div className="text-xs text-slate-400 uppercase tracking-wide">{s.label}</div>
                     </div>
                   </div>
                 ))}
               </div>
-              <InfoBox color="#94a3b8" borderColor="#1e293b" bg="#0f1a2e">
-                🏥 Service Health: {isLive ? "Connected to Azure ARM" : "Demo mode"} • Provider: Microsoft.HybridCompute
+              <InfoBox color="#94a3b8" borderColor="" bg="">
+                🏥 Service Health: {isLive ? "Connected to Azure ARM" : "Demo mode"} · Provider: Microsoft.HybridCompute
               </InfoBox>
             </div>
           );
@@ -1727,31 +1536,26 @@ export default function ArcChat() {
                 }
               };
               return (
-                <div style={{
-                  background: "#0c1524",
-                  border: "1px solid #1a2740",
-                  borderRadius: 4, padding: 18, marginTop: 8,
-                }}>
-                  <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14 }}>Configuration Profile</div>
-                  <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8", lineHeight: 1.8 }}>
-                    <div><span style={{ color: "#64748b" }}>Platform:</span> Windows 10/11</div>
-                    <div><span style={{ color: "#64748b" }}>Extension Type:</span> RunCommandHandlerWindows</div>
-                    <div><span style={{ color: "#64748b" }}>Set-TimeZone:</span> <span style={{ color: "#34d399" }}>Eastern Standard Time</span></div>
-                    <div><span style={{ color: "#64748b" }}>Scope:</span> All Arc-connected machines</div>
-                    <div><span style={{ color: "#64748b" }}>API Endpoint:</span> <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "#d4a574" }}>PUT /config/extension</span></div>
+                <div className="border border-slate-200 rounded-lg p-4 mt-2 bg-white shadow-sm">
+                  <div className="text-slate-900 font-bold text-sm mb-3">Configuration Profile</div>
+                  <div className="text-xs text-slate-500 space-y-1.5 leading-relaxed">
+                    <div><span className="text-slate-400">Platform:</span> Windows 10/11</div>
+                    <div><span className="text-slate-400">Extension Type:</span> RunCommandHandlerWindows</div>
+                    <div><span className="text-slate-400">Set-TimeZone:</span> <span className="text-emerald-600 font-medium">Eastern Standard Time</span></div>
+                    <div><span className="text-slate-400">Scope:</span> All Arc-connected machines</div>
+                    <div><span className="text-slate-400">API Endpoint:</span> <span className="font-mono text-blue-600">PUT /config/extension</span></div>
                   </div>
                   {status === "idle" && (
-                    <button onClick={handleDeploy} style={{
-                      marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 3, border: "none",
-                      fontWeight: 600, fontSize: 13, cursor: "pointer",
-                      background: "#0d9488", color: "#fff",
-                    }}>Create & Assign Profile</button>
+                    <button onClick={handleDeploy}
+                      className="mt-3 w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg transition-all">
+                      Create & Assign Profile
+                    </button>
                   )}
-                  {status === "deploying" && <StepProgress steps={steps} gradient="#0d9488, #14b8a6" />}
+                  {status === "deploying" && <StepProgress steps={steps} />}
                   {status === "deployed" && (
                     <div>
-                      <StepProgress steps={steps} gradient="#0d9488, #14b8a6" />
-                      <InfoBox color="#34d399" borderColor="#166534" bg="#0d3320">
+                      <StepProgress steps={steps} />
+                      <InfoBox color="#34d399" borderColor="" bg="">
                         Extension deployed via Azure Arc. Machines will apply settings on next agent check-in.
                       </InfoBox>
                     </div>
