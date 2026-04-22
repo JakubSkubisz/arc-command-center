@@ -1867,7 +1867,7 @@ export default function ArcChat() {
         flexShrink: 0,
         borderBottom: "1px solid rgba(30,41,59,0.3)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 780, margin: "0 auto 0 max(20px, calc((100% - 780px) * 0.35))" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 780, margin: "0 auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{
               fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontWeight: 700,
@@ -1923,7 +1923,7 @@ export default function ArcChat() {
 
       {/* Messages */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "24px 20px" }}>
-        <div style={{ maxWidth: 780, margin: "0 auto 0 max(20px, calc((100% - 780px) * 0.35))" }}>
+        <div style={{ maxWidth: 780, margin: "0 auto" }}>
           {messages.length === 0 ? (
             <WelcomeScreen onQuickAction={handleQuickAction} isLive={isLive} />
           ) : (
@@ -1942,7 +1942,7 @@ export default function ArcChat() {
       {/* Suggestions */}
       {messages.length > 0 && messages.length < 3 && (
         <div style={{ padding: "0 20px 10px" }}>
-          <div style={{ maxWidth: 780, margin: "0 auto 0 max(20px, calc((100% - 780px) * 0.35))", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ maxWidth: 780, margin: "0 auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
             {["Deploy Chrome to all machines", "Show compliance", "Push quality update", "Sync all devices"].map(s => (
               <button key={s} onClick={() => handleQuickAction(s)}
                 style={{
@@ -1973,7 +1973,7 @@ export default function ArcChat() {
         flexShrink: 0,
         borderTop: "1px solid rgba(30,41,59,0.3)",
       }}>
-        <div style={{ maxWidth: 780, margin: "0 auto 0 max(20px, calc((100% - 780px) * 0.35))" }}>
+        <div style={{ maxWidth: 780, margin: "0 auto" }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <input value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleSend()}
