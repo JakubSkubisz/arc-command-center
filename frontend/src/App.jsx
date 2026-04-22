@@ -124,63 +124,75 @@ function createApi(baseUrl, isLive) {
   }
 
   return {
-    // Devices
+    // Machines
     async getDevices() {
       if (!isLive) return DEMO_DEVICES;
       const data = await call("GET", "/devices");
       return data.map(d => ({
         id: d.id,
         name: d.name,
-        user: d.user,
+        user: d.user || "—",
         os: d.os,
-        status: normalizeStatus(d.status),
+        status: d.status === "Connected" ? "Connected" : d.status === "Disconnected" ? "Disconnected" : "Error",
         lastSync: timeAgo(d.lastSync),
       }));
     },
 
-    async syncDevice(deviceId) {
+    async syncDevice(machineName) {
       if (!isLive) return { success: true };
-      return call("POST", `/devices/${deviceId}/sync`);
+      return call("POST", `/devices/${machineName}/run-command`, { script: "& 'C:\\Program Files\\AzureConnectedMachineAgent\\azcmagent.exe' check", location: "eastus" });
     },
 
-    async rebootDevice(deviceId) {
+    async rebootDevice(machineName) {
       if (!isLive) return { success: true };
-      return call("POST", `/devices/${deviceId}/reboot`);
+      return call("POST", `/devices/${machineName}/run-command`, { script: "Restart-Computer -Force", type: "PowerShell" });
     },
 
-    async wipeDevice(deviceId) {
+    async wipeDevice(machineName) {
       if (!isLive) return { success: true };
-      return call("POST", `/devices/${deviceId}/wipe`, { keepUserData: false });
+      return call("POST", `/devices/${machineName}/run-command`, { script: "Reset-Computer -ResetType FactoryReset -Force", type: "PowerShell" });
     },
 
-    async retireDevice(deviceId) {
+    async retireDevice(machineName) {
       if (!isLive) return { success: true };
-      return call("POST", `/devices/${deviceId}/retire`);
+      return call("POST", `/devices/${machineName}/run-command`, { script: "azcmagent disconnect --force-local-only", type: "PowerShell" });
     },
 
-    // Apps
-    async deployApp(displayName, packageId, groupId) {
+    // Apps — deploy via WinGet extension per machine
+    async deployApp(displayName, packageId, machineName) {
       if (!isLive) return { success: true, appId: "demo-" + Date.now() };
-      return call("POST", "/apps/deploy-store", { displayName, packageIdentifier: packageId, groupId });
+      return call("POST", "/apps/deploy-winget", { machineName, packageId });
     },
 
-    // Updates
-    async pushQualityUpdate(groupId) {
-      if (!isLive) return { success: true, profileId: "demo-qu-" + Date.now() };
-      return call("POST", "/updates/quality", { groupId, releaseDate: new Date().toISOString().split("T")[0] });
+    async pollDeployStatus(machineName, packageId, onStatus, signal) {
+      if (!isLive) return "Succeeded";
+      const runCommandName = `WinGet-${packageId.replace(/\./g, "-")}`;
+      while (!signal?.aborted) {
+        await new Promise(r => setTimeout(r, 5000));
+        if (signal?.aborted) break;
+        try {
+          const data = await call("GET", `/apps/${machineName}/${runCommandName}/status`);
+          onStatus(data);
+          const state = data.executionState || data.provisioningState;
+          if (state === "Succeeded" || state === "Failed" || state === "Canceled") return state;
+        } catch {
+          // keep polling on transient errors
+        }
+      }
     },
 
-    async pushFeatureUpdate(groupId, version) {
-      if (!isLive) return { success: true, profileId: "demo-fu-" + Date.now() };
-      return call("POST", "/updates/feature", { groupId, featureUpdateVersion: version || "Windows 11, version 24H2" });
+    // Updates — Arc patch management per machine
+    async pushUpdate(machineName) {
+      if (!isLive) return { success: true, profileId: "demo-update-" + Date.now() };
+      return call("POST", "/updates/install", { machineName });
     },
 
-    async createUpdateRing(groupId, deferral) {
-      if (!isLive) return { success: true, ringId: "demo-ring-" + Date.now() };
-      return call("POST", "/updates/ring", { groupId, qualityDeferral: deferral || 0, featureDeferral: deferral || 0 });
+    async assessPatches(machineName) {
+      if (!isLive) return { success: true };
+      return call("POST", "/updates/assess", { machineName });
     },
 
-    // Compliance
+    // Compliance — map Arc connected/disconnected to compliant/noncompliant
     async getCompliance() {
       if (!isLive) {
         const devices = DEMO_DEVICES;
@@ -192,19 +204,36 @@ function createApi(baseUrl, isLive) {
         });
         return { summary, devices };
       }
-      return call("GET", "/compliance");
+      const data = await call("GET", "/compliance");
+      return {
+        summary: {
+          compliant: data.summary.connected || 0,
+          noncompliant: (data.summary.disconnected || 0) + (data.summary.error || 0),
+          inGracePeriod: 0,
+        },
+        devices: (data.devices || []).map(d => ({
+          ...d,
+          status: d.status === "Connected" ? "Connected" : d.status === "Disconnected" ? "Disconnected" : "Error",
+          lastSync: timeAgo(d.lastSync),
+        })),
+      };
     },
 
-    // Groups
-    async getGroups() {
-      if (!isLive) return DEMO_GROUPS;
-      return call("GET", "/config/groups");
-    },
-
-    // Config profile
-    async createConfigProfile(displayName, settings, groupId) {
+    // Config — deploy a run-command extension to each target machine
+    async createConfigProfile(displayName, script, machineNames) {
       if (!isLive) return { success: true, profileId: "demo-cfg-" + Date.now() };
-      return call("POST", "/config/profile", { displayName, settings, groupId });
+      const targets = Array.isArray(machineNames) ? machineNames : [machineNames];
+      for (const machineName of targets) {
+        await call("PUT", "/config/extension", {
+          machineName,
+          extensionName: displayName.replace(/[^a-zA-Z0-9-]/g, "-").substring(0, 24),
+          publisher: "Microsoft.CPlat.Core",
+          type: "RunCommandHandlerWindows",
+          version: "1.2",
+          settings: { script: Array.isArray(script) ? script : [script] },
+        });
+      }
+      return { success: true, count: targets.length };
     },
 
     // Health
@@ -242,20 +271,22 @@ function TypingIndicator() {
 function StatusBadge({ status }) {
   const colors = {
     Compliant: { bg: "#0d3320", text: "#34d399", border: "#166534" },
+    Connected: { bg: "#0d3320", text: "#34d399", border: "#166534" },
     "Non-Compliant": { bg: "#3b1118", text: "#f87171", border: "#7f1d1d" },
+    Disconnected: { bg: "#3b1118", text: "#f87171", border: "#7f1d1d" },
     "In Grace Period": { bg: "#3b2e10", text: "#fbbf24", border: "#78350f" },
     Pending: { bg: "#1e293b", text: "#94a3b8", border: "#334155" },
     Deployed: { bg: "#0d3320", text: "#34d399", border: "#166534" },
-    Queued: { bg: "#172554", text: "#60a5fa", border: "#1e3a5f" },
+    Queued: { bg: "#2a2416", text: "#d4a574", border: "#4a3a1a" },
     Error: { bg: "#3b1118", text: "#f87171", border: "#7f1d1d" },
   };
   const c = colors[status] || colors.Pending;
   return (
     <span style={{
-      fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
+      fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 3,
       background: c.bg, color: c.text, border: `1px solid ${c.border}`,
       letterSpacing: 0.3, textTransform: "uppercase",
-      boxShadow: `inset 0 1px 2px rgba(0,0,0,0.2), 0 0 8px ${c.text}15`,
+
     }}>{status}</span>
   );
 }
@@ -265,33 +296,14 @@ function ActionCard({ icon, title, subtitle, onClick }) {
   return (
     <button onClick={onClick} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       style={{
-        background: hovered ? "rgba(19,31,56,0.8)" : "rgba(13,21,38,0.6)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        border: `1px solid ${hovered ? "rgba(59,130,246,0.4)" : "rgba(24,36,65,0.6)"}`,
-        borderRadius: 14, padding: "18px 20px", cursor: "pointer", textAlign: "left",
-        transition: "all 0.2s ease",
-        transform: hovered ? "translateY(-2px) scale(1.02)" : "none",
-        boxShadow: hovered
-          ? "0 8px 30px rgba(37,99,235,0.15), inset 0 1px 0 rgba(59,130,246,0.1)"
-          : "0 0 0 0 transparent",
+        background: "#0c1524",
+        border: `1px solid ${hovered ? "#2a3f5f" : "#1a2740"}`,
+        borderRadius: 4, padding: "12px 14px", cursor: "pointer", textAlign: "left",
+        transition: "all 0.15s ease",
         width: "100%",
-        position: "relative",
-        overflow: "hidden",
       }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: hovered
-          ? "linear-gradient(90deg, transparent, rgba(59,130,246,0.5), transparent)"
-          : "linear-gradient(90deg, transparent, rgba(59,130,246,0.15), transparent)",
-        transition: "all 0.2s ease",
-      }} />
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{
-          fontSize: 22,
-          filter: hovered ? "drop-shadow(0 0 6px rgba(59,130,246,0.3))" : "none",
-          transition: "filter 0.2s ease",
-        }}>{icon}</span>
+        <span style={{ fontSize: 22 }}>{icon}</span>
         <div>
           <div style={{ color: "#e2e8f0", fontSize: 14, fontWeight: 600 }}>{title}</div>
           {subtitle && <div style={{ color: "#64748b", fontSize: 12, marginTop: 3 }}>{subtitle}</div>}
@@ -305,11 +317,10 @@ function InfoBox({ color, borderColor, bg, children }) {
   return (
     <div style={{
       marginTop: 8, padding: "12px 16px",
-      background: `linear-gradient(135deg, ${bg}, ${bg}dd)`,
+      background: bg,
       border: `1px solid ${borderColor}`,
       borderLeft: `3px solid ${color}`,
-      borderRadius: 12, color, fontSize: 12, lineHeight: 1.5,
-      boxShadow: `inset 0 1px 0 rgba(255,255,255,0.03)`,
+      borderRadius: 3, color, fontSize: 12, lineHeight: 1.5,
     }}>
       {children}
     </div>
@@ -317,7 +328,7 @@ function InfoBox({ color, borderColor, bg, children }) {
 }
 
 function StepProgress({ steps, gradient }) {
-  const accent = gradient ? gradient.split(",")[0].trim() : "#3b82f6";
+  const accent = gradient ? gradient.split(",")[0].trim() : "#c9a227";
   return (
     <div style={{ marginTop: 14, padding: "2px 0" }}>
       {steps.map((step, i) => {
@@ -334,13 +345,10 @@ function StepProgress({ steps, gradient }) {
               <div style={{
                 width: 22, height: 22, borderRadius: "50%",
                 background: step.status === "pending" ? "rgba(15,26,46,0.8)" : cfg.bg,
-                backdropFilter: "blur(4px)",
                 border: `2px solid ${cfg.border}`,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 10, fontWeight: 700, color: "#fff",
-                animation: step.status === "active" ? "pulseGlow 1.5s infinite" : "none",
                 transition: "all 0.3s ease",
-                boxShadow: step.status === "done" ? "0 0 8px rgba(5,150,105,0.3)" : step.status === "active" ? "0 0 10px rgba(59,130,246,0.3)" : "none",
               }}>{cfg.icon}</div>
               {!isLast && (
                 <div style={{
@@ -377,12 +385,9 @@ function LiveActionTracker({ actionLabel, deviceStates, totalCount, completedCou
   return (
     <div style={{
       marginTop: 10,
-      background: "rgba(13,21,38,0.6)",
-      backdropFilter: "blur(12px)",
-      WebkitBackdropFilter: "blur(12px)",
-      border: "1px solid rgba(24,36,65,0.6)",
-      borderRadius: 12, padding: 16,
-      animation: "glowPulse 4s ease-in-out infinite",
+      background: "#0c1524",
+      border: "1px solid #1a2740",
+      borderRadius: 4, padding: 16,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
         <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>{actionLabel} Progress</span>
@@ -395,15 +400,11 @@ function LiveActionTracker({ actionLabel, deviceStates, totalCount, completedCou
           height: "100%", borderRadius: 99,
           background: allDone
             ? "linear-gradient(90deg, #059669, #34d399)"
-            : "linear-gradient(90deg, #1e40af, #3b82f6)",
+            : "linear-gradient(90deg, #a67c00, #c9a227)",
           width: `${pct}%`, transition: "width 0.4s ease",
           position: "relative", overflow: "hidden",
         }}>
-          {!allDone && <div style={{
-            position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)",
-            animation: "progressShimmer 1.5s ease-in-out infinite",
-          }} />}
+
         </div>
       </div>
       <div style={{ marginTop: 12, maxHeight: 200, overflowY: "auto" }}>
@@ -447,18 +448,16 @@ function DeviceTable({ devices, onAction, selectable, selected, onSelect }) {
   const checkboxStyle = (checked) => ({
     width: 16, height: 16, borderRadius: 4, cursor: "pointer",
     border: checked ? "none" : "2px solid #334155",
-    background: checked ? "linear-gradient(135deg, #2563eb, #3b82f6)" : "transparent",
+    background: checked ? "#a67c00" : "transparent",
     display: "flex", alignItems: "center", justifyContent: "center",
     flexShrink: 0, transition: "all 0.15s ease",
-    transform: checked ? "scale(1.1)" : "scale(1)",
-    boxShadow: checked ? "0 0 8px rgba(59,130,246,0.3)" : "none",
   });
 
   return (
-    <div style={{ overflowX: "auto", borderRadius: 12, border: "1px solid rgba(30,41,59,0.5)", marginTop: 8 }}>
+    <div style={{ overflowX: "auto", borderRadius: 4, border: "1px solid rgba(30,41,59,0.5)", marginTop: 8 }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
         <thead>
-          <tr style={{ background: "linear-gradient(180deg, rgba(12,21,36,0.9), rgba(15,26,46,0.8))" }}>
+          <tr style={{ background: "#0c1524" }}>
             {selectable && (
               <th style={{ padding: "10px 10px 10px 14px", borderBottom: "1px solid #1e293b", width: 36 }}>
                 <div onClick={toggleAll} style={checkboxStyle(allSelected)}>
@@ -507,13 +506,12 @@ function DeviceTable({ devices, onAction, selectable, selected, onSelect }) {
                       {[{ label: "⟳", action: "sync", title: "Sync" }, { label: "↻", action: "reboot", title: "Restart" }].map(a => (
                         <button key={a.action} title={a.title}
                           onClick={(e) => { e.stopPropagation(); onAction(d.id, d.name, a.action); }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(59,130,246,0.4)"; e.currentTarget.style.color = "#60a5fa"; e.currentTarget.style.boxShadow = "0 0 12px rgba(59,130,246,0.15)"; }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(201,162,39,0.4)"; e.currentTarget.style.color = "#d4a574"; e.currentTarget.style.boxShadow = "0 0 12px rgba(201,162,39,0.12)"; }}
                           onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.boxShadow = "none"; }}
                           style={{
-                            width: 28, height: 28, borderRadius: 6,
+                            width: 28, height: 28, borderRadius: 3,
                             border: "1px solid rgba(30,41,59,0.5)",
-                            background: "rgba(15,26,46,0.6)",
-                            backdropFilter: "blur(4px)",
+                            background: "#0c1524",
                             color: "#94a3b8", cursor: "pointer", fontSize: 13,
                             display: "flex", alignItems: "center", justifyContent: "center",
                             transition: "all 0.2s ease",
@@ -536,26 +534,19 @@ function BulkActionBar({ count, onSync, onReboot, onWipe, onRetire, onClear, bus
     padding: "7px 14px", borderRadius: 8, border: "1px solid transparent", fontWeight: 600,
     fontSize: 12, cursor: busy ? "not-allowed" : "pointer", transition: "all 0.2s",
     opacity: busy ? 0.5 : 1, display: "flex", alignItems: "center", gap: 5,
-    backdropFilter: "blur(4px)",
   };
   return (
     <div style={{
       marginTop: 10, padding: "12px 16px",
-      background: "rgba(12,21,36,0.7)",
-      backdropFilter: "blur(12px)",
-      WebkitBackdropFilter: "blur(12px)",
-      border: "1px solid rgba(59,130,246,0.3)", borderRadius: 12,
+      background: "#0c1524",
+      border: "1px solid rgba(201,162,39,0.25)", borderRadius: 3,
       display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8,
       animation: "fadeSlideIn 0.2s ease",
       position: "relative", overflow: "hidden",
     }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.4), transparent)",
-      }} />
       <div style={{ color: "#e2e8f0", fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{
-          background: "linear-gradient(135deg, #2563eb, #3b82f6)", color: "#fff",
+          background: "#a67c00", color: "#fff",
           borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700,
         }}>{count}</span>
         device{count !== 1 ? "s" : ""} selected
@@ -565,7 +556,7 @@ function BulkActionBar({ count, onSync, onReboot, onWipe, onRetire, onClear, bus
         }}>Clear</button>
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <button onClick={onSync} disabled={busy} style={{ ...btnBase, background: "#172554", color: "#d4a574" }}>
+        <button onClick={onSync} disabled={busy} style={{ ...btnBase, background: "#2a2416", color: "#d4a574" }}>
           ⟳ Sync
         </button>
         <button onClick={onReboot} disabled={busy} style={{ ...btnBase, background: "#3b2e10", color: "#fbbf24" }}>
@@ -601,17 +592,16 @@ function TargetSelector({ devices, preSelected, onConfirm, actionLabel, gradient
     onConfirm(selectedDevices, mode === "all");
   };
 
-  const accent = gradient ? gradient.split(",")[0].trim() : "#3b82f6";
+  const accent = gradient ? gradient.split(",")[0].trim() : "#c9a227";
 
   if (confirmed) {
     const isAll = mode === "all";
     return (
       <div style={{
         marginTop: 8, padding: "10px 16px",
-        background: "rgba(13,21,38,0.6)",
-        backdropFilter: "blur(12px)",
-        border: "1px solid rgba(24,36,65,0.6)",
-        borderRadius: 10,
+        background: "#0c1524",
+        border: "1px solid #1a2740",
+        borderRadius: 4,
         display: "flex", alignItems: "center", gap: 8,
         animation: "fadeSlideIn 0.3s ease",
       }}>
@@ -635,16 +625,14 @@ function TargetSelector({ devices, preSelected, onConfirm, actionLabel, gradient
   return (
     <div style={{
       marginTop: 8,
-      background: "rgba(13,21,38,0.6)",
-      backdropFilter: "blur(12px)",
-      WebkitBackdropFilter: "blur(12px)",
-      border: "1px solid rgba(24,36,65,0.6)",
-      borderRadius: 12, padding: 16,
+      background: "#0c1524",
+      border: "1px solid #1a2740",
+      borderRadius: 4, padding: 16,
       animation: "fadeSlideIn 0.3s ease",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 600 }}>Select target devices</span>
+          <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.2, fontWeight: 600, color: "#475569" }}>Select target devices</span>
           <span style={{
             background: accent, color: "#fff", borderRadius: 6,
             padding: "2px 8px", fontSize: 11, fontWeight: 700,
@@ -669,16 +657,12 @@ function TargetSelector({ devices, preSelected, onConfirm, actionLabel, gradient
       )}
 
       <button onClick={handleConfirm} disabled={selected.length === 0} style={{
-        marginTop: 12, width: "100%", padding: "10px 0", borderRadius: 8, border: "none",
+        marginTop: 12, width: "100%", padding: "10px 0", borderRadius: 3, border: "none",
         fontWeight: 600, fontSize: 13, cursor: selected.length > 0 ? "pointer" : "not-allowed",
-        background: selected.length > 0
-          ? `linear-gradient(135deg, ${gradient || "#2563eb, #3b82f6"})`
-          : "#1e293b",
+        background: selected.length > 0 ? accent : "#1e293b",
         color: selected.length > 0 ? "#fff" : "#475569",
-        transition: "all 0.3s", letterSpacing: 0.3,
-        boxShadow: selected.length > 0 ? `0 4px 20px ${accent}30` : "none",
+        transition: "all 0.15s", letterSpacing: 0.3,
         opacity: selected.length === 0 ? 0.5 : 1,
-        position: "relative", overflow: "hidden",
       }}>
         <span style={{ position: "relative", zIndex: 1 }}>
           {actionLabel ? `Confirm Targets & ${actionLabel}` : "Confirm Targets"} ({selected.length} device{selected.length !== 1 ? "s" : ""})
@@ -691,17 +675,10 @@ function TargetSelector({ devices, preSelected, onConfirm, actionLabel, gradient
 function DeployCard({ title, subtitle, meta, gradient, onDeploy, status, steps }) {
   return (
     <div style={{
-      background: "rgba(13,21,38,0.6)",
-      backdropFilter: "blur(12px)",
-      WebkitBackdropFilter: "blur(12px)",
-      border: "1px solid rgba(24,36,65,0.6)",
-      borderRadius: 12, padding: 18, marginTop: 8,
-      position: "relative", overflow: "hidden",
+      background: "#0c1524",
+      border: "1px solid #1a2740",
+      borderRadius: 4, padding: 18, marginTop: 8,
     }}>
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg, transparent, ${(gradient || "#3b82f6").split(",")[0].trim()}, transparent)`,
-      }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
           <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 15 }}>{title}</div>
@@ -712,27 +689,19 @@ function DeployCard({ title, subtitle, meta, gradient, onDeploy, status, steps }
       </div>
       {status === "idle" && (
         <button onClick={onDeploy} style={{
-          marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 8, border: "none",
+          marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 3, border: "none",
           fontWeight: 600, fontSize: 13, cursor: "pointer",
-          background: `linear-gradient(135deg, ${gradient})`, color: "#fff",
-          transition: "all 0.3s", letterSpacing: 0.3,
-          boxShadow: `0 4px 20px ${(gradient || "#3b82f6").split(",")[0].trim()}30`,
-          position: "relative", overflow: "hidden",
+          background: (gradient || "#c9a227").split(",")[0].trim(), color: "#fff",
+          transition: "all 0.15s", letterSpacing: 0.3,
         }}>
-          <span style={{ position: "relative", zIndex: 1 }}>Confirm & Deploy</span>
-          <div style={{
-            position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)",
-            backgroundSize: "200% 100%",
-            animation: "shimmer 3s ease-in-out infinite",
-          }} />
+          Confirm & Deploy
         </button>
       )}
       {status === "deploying" && (
         steps && steps.length > 0
           ? <StepProgress steps={steps} gradient={gradient} />
           : <div style={{ marginTop: 14, padding: "10px 0", textAlign: "center", color: "#64748b", fontSize: 13 }}>
-              <span style={{ animation: "typingBounce 1s infinite" }}>...</span> Calling Microsoft Graph API...
+              <span style={{ animation: "typingBounce 1s infinite" }}>...</span> Calling Azure ARM API...
             </div>
       )}
       {status === "deployed" && (
@@ -770,25 +739,15 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest }
   return (
     <div style={{
       position: "fixed", inset: 0,
-      background: "radial-gradient(ellipse at center, rgba(0,0,0,0.5), rgba(0,0,0,0.75))",
-      backdropFilter: "blur(24px)",
-      WebkitBackdropFilter: "blur(24px)",
+      background: "rgba(0,0,0,0.7)",
       zIndex: 100,
       display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
     }}>
       <div style={{
-        background: "rgba(12,21,36,0.85)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
+        background: "#0c1524",
         border: "1px solid rgba(30,41,59,0.5)",
-        borderRadius: 16, padding: 24, width: "100%", maxWidth: 440,
-        position: "relative", overflow: "hidden",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+        borderRadius: 4, padding: 24, width: "100%", maxWidth: 440,
       }}>
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 2,
-          background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.3), transparent)",
-        }} />
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ color: "#f1f5f9", fontSize: 16, fontWeight: 700 }}>⚙️ Connection Settings</div>
           <button onClick={onClose} style={{
@@ -807,13 +766,11 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest }
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             {[{ label: "Demo", value: false, desc: "Simulated data" }, { label: "Live", value: true, desc: "Azure backend" }].map(m => (
               <button key={m.label} onClick={() => setIsLive(m.value)} style={{
-                flex: 1, padding: "10px 14px", borderRadius: 10, cursor: "pointer",
-                background: isLive === m.value ? "rgba(23,37,84,0.7)" : "rgba(15,26,46,0.5)",
-                backdropFilter: "blur(8px)",
-                border: `1px solid ${isLive === m.value ? "rgba(59,130,246,0.5)" : "rgba(30,41,59,0.5)"}`,
-                color: isLive === m.value ? "#60a5fa" : "#64748b", textAlign: "center",
-                transition: "all 0.2s ease",
-                boxShadow: isLive === m.value ? "0 0 15px rgba(59,130,246,0.1)" : "none",
+                flex: 1, padding: "10px 14px", borderRadius: 3, cursor: "pointer",
+                background: isLive === m.value ? "#2a2416" : "#0f1a2e",
+                border: `1px solid ${isLive === m.value ? "rgba(201,162,39,0.45)" : "rgba(30,41,59,0.5)"}`,
+                color: isLive === m.value ? "#d4a574" : "#64748b", textAlign: "center",
+                transition: "all 0.15s ease",
               }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{m.label}</div>
                 <div style={{ fontSize: 10, marginTop: 2, opacity: 0.7 }}>{m.desc}</div>
@@ -829,7 +786,7 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest }
           <input value={apiUrl} onChange={e => setApiUrl(e.target.value)}
             placeholder="https://your-app.azurewebsites.net/api"
             style={{
-              width: "100%", padding: "10px 14px", borderRadius: 10, marginTop: 6,
+              width: "100%", padding: "10px 14px", borderRadius: 3, marginTop: 6,
               border: "1px solid #1e293b", background: "#111827", color: "#e2e8f0",
               fontSize: 13, outline: "none", fontFamily: "'JetBrains Mono', monospace",
             }} />
@@ -837,7 +794,7 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest }
 
         {isLive && (
           <button onClick={runTest} disabled={testing} style={{
-            width: "100%", padding: "10px 0", borderRadius: 10, border: "1px solid #1e293b",
+            width: "100%", padding: "10px 0", borderRadius: 3, border: "1px solid #1e293b",
             background: "#0f1a2e", color: "#94a3b8", fontSize: 13, fontWeight: 600,
             cursor: testing ? "not-allowed" : "pointer", marginBottom: 12,
           }}>
@@ -855,11 +812,11 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest }
           </InfoBox>
         )}
 
-        <div style={{ marginTop: 16, padding: "12px 14px", background: "#0f1a2e", border: "1px solid #1e293b", borderRadius: 10, color: "#64748b", fontSize: 11, lineHeight: 1.6 }}>
+        <div style={{ marginTop: 16, padding: "12px 14px", background: "#0f1a2e", border: "1px solid #1e293b", borderRadius: 3, color: "#64748b", fontSize: 11, lineHeight: 1.6 }}>
           <strong style={{ color: "#94a3b8" }}>Setup required for Live mode:</strong><br />
           1. Deploy the Node.js backend to Azure App Service<br />
-          2. Register an app in Entra ID with Graph API permissions<br />
-          3. Store credentials in Azure Key Vault<br />
+          2. Register an Entra ID app with ARM permissions (Azure Connected Machine Contributor)<br />
+          3. Set CLIENT_ID, TENANT_ID, CLIENT_SECRET, AZURE_SUBSCRIPTION_ID in App Service config<br />
           4. Enter your App Service URL above
         </div>
       </div>
@@ -869,37 +826,25 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest }
 
 function WelcomeScreen({ onQuickAction, isLive }) {
   return (
-    <div style={{ padding: "60px 24px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100%" }}>
-      <div style={{
-        width: 80, height: 80, borderRadius: 22, margin: "0 auto 28px",
-        background: "linear-gradient(135deg, #1e40af, #3b82f6)",
-        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 38,
-        animation: "logoGlow 3s ease-in-out infinite",
-      }}>🛡️</div>
+    <div style={{ padding: "40px 0", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", minHeight: "100%" }}>
       <h2 style={{
-        fontSize: 30, fontWeight: 800, margin: 0, letterSpacing: -0.5,
-        background: "linear-gradient(135deg, #e2e8f0 0%, #60a5fa 50%, #e2e8f0 100%)",
-        backgroundSize: "200% auto",
-        WebkitBackgroundClip: "text",
-        WebkitTextFillColor: "transparent",
-        backgroundClip: "text",
-        animation: "gradientShift 6s ease infinite",
+        fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: -0.5,
+        color: "#e2e8f0",
       }}>
-        Intune Command Center
+        Arc Command Center
       </h2>
-      <p style={{ color: "#7c8db5", fontSize: 15, marginTop: 14, lineHeight: 1.8, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
-        Manage your Team 2 fleet. Deploy apps, push patches, check compliance, and monitor devices — all through natural language.
+      <p style={{ color: "#7c8db5", fontSize: 14, marginTop: 10, lineHeight: 1.7, maxWidth: 480 }}>
+        Manage your Team 2 Arc fleet. Deploy apps via WinGet, push patches, check machine health, and run commands — all through natural language.
       </p>
       {!isLive && (
         <div style={{
-          display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 14px", marginTop: 16,
-          background: "rgba(59,46,16,0.6)", border: "1px solid #78350f", borderRadius: 99,
-          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", marginTop: 12,
+          background: "rgba(59,46,16,0.6)", border: "1px solid #78350f", borderRadius: 3,
           color: "#fbbf24", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5,
-        }}>Demo Mode — click settings to connect Azure</div>
+        }}>Demo Mode — click settings to connect Azure Arc</div>
       )}
       <div style={{
-        display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 36, width: "100%", maxWidth: 520,
+        display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 8, marginTop: 28, width: "100%",
       }}>
         <ActionCard icon="📦" title="Deploy an App" subtitle="Push software to devices" onClick={() => onQuickAction("Install Google Chrome on All Devices")} />
         <ActionCard icon="🔄" title="Push Updates" subtitle="Windows quality patches" onClick={() => onQuickAction("Push latest quality update to All Devices")} />
@@ -913,32 +858,18 @@ function WelcomeScreen({ onQuickAction, isLive }) {
 function MessageBubble({ message }) {
   const isUser = message.role === "user";
   return (
-    <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: 20, animation: "fadeSlideIn 0.3s ease" }}>
-      {!isUser && (
+    <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12, animation: "fadeSlideIn 0.3s ease" }}>
+      <div style={{ maxWidth: "90%" }}>
         <div style={{
-          width: 34, height: 34, borderRadius: 10, flexShrink: 0, marginRight: 12, marginTop: 2,
-          background: "linear-gradient(135deg, #1e40af, #3b82f6)",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
-          boxShadow: "0 0 12px rgba(59,130,246,0.2), 0 0 0 1px rgba(59,130,246,0.15)",
-        }}>🛡️</div>
-      )}
-      <div style={{ maxWidth: "80%" }}>
-        <div style={{
-          padding: "14px 18px",
-          borderRadius: isUser ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-          background: isUser
-            ? "linear-gradient(135deg, #1e40af, #2563eb, #4338ca)"
-            : "rgba(13,21,38,0.7)",
-          backdropFilter: isUser ? "none" : "blur(12px)",
-          WebkitBackdropFilter: isUser ? "none" : "blur(12px)",
-          border: isUser ? "none" : "1px solid rgba(24,36,65,0.6)",
+          padding: "10px 14px",
+          borderRadius: 0,
+          background: "transparent",
+          borderLeft: isUser ? "2px solid #334155" : "none",
           color: "#e2e8f0", fontSize: 14, lineHeight: 1.7, whiteSpace: "pre-line",
-          boxShadow: isUser
-            ? "0 4px 20px rgba(37,99,235,0.2), inset 0 1px 0 rgba(255,255,255,0.05)"
-            : "0 2px 12px rgba(0,0,0,0.15)",
+          fontWeight: isUser ? 500 : 400,
         }}>{message.text}</div>
         {message.component && (
-          <div style={{ marginTop: 8, borderLeft: "2px solid rgba(59,130,246,0.15)", paddingLeft: 0 }}>
+          <div style={{ marginTop: 8 }}>
             {message.component}
           </div>
         )}
@@ -950,7 +881,7 @@ function MessageBubble({ message }) {
 // ============================================================
 // MAIN COMPONENT
 // ============================================================
-export default function IntuneChat() {
+export default function ArcChat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -974,7 +905,6 @@ export default function IntuneChat() {
   useEffect(() => {
     apiRef.current = createApi(apiUrl, isLive);
     if (isLive) {
-      apiRef.current.getGroups().then(setGroups).catch(() => setGroups(DEMO_GROUPS));
       apiRef.current.getDevices().then(setDeviceList).catch(() => setDeviceList(DEMO_DEVICES));
     } else {
       setGroups(DEMO_GROUPS);
@@ -1008,7 +938,7 @@ export default function IntuneChat() {
       if (!intent) {
         setIsTyping(false);
         addBot(
-          "I can help you manage your Intune environment. Try asking me to:\n\n• Deploy an app (e.g. \"Install Chrome on All Devices\")\n• Push updates (e.g. \"Push quality update to Engineering Team\")\n• Check device status or compliance\n• Sync or restart a device\n• Create a configuration profile"
+          "I can help you manage your Azure Arc environment. Try asking me to:\n\n• Deploy an app (e.g. \"Install Chrome on all machines\")\n• Push updates (e.g. \"Push quality update to all devices\")\n• Check machine status or compliance\n• Sync or restart a machine\n• Configure a setting (e.g. \"Set date/time region\")"
         );
         return;
       }
@@ -1038,37 +968,47 @@ export default function IntuneChat() {
                 const targetLabel = targetAll ? groupName : `${targetDevices.length} device${targetDevices.length !== 1 ? "s" : ""}`;
                 const [status, setStatus] = useState("idle");
                 const [steps, setSteps] = useState([
-                  { key: "auth", label: "Authenticating with Microsoft Graph", status: "pending", timestamp: null },
-                  { key: "create", label: `Creating Win32 app: ${app.name}`, status: "pending", timestamp: null },
-                  { key: "assign", label: `Assigning to ${targetLabel}`, status: "pending", timestamp: null },
+                  { key: "auth", label: "Authenticating with Azure ARM", status: "pending", timestamp: null },
+                  { key: "create", label: `Submitting run command: ${app.name}`, status: "pending", timestamp: null },
+                  { key: "install", label: `Installing on machine (polling every 5s)...`, status: "pending", timestamp: null },
                   { key: "done", label: "Deployment complete", status: "pending", timestamp: null },
                 ]);
-                const advance = (key, s) => setSteps(prev => prev.map(st =>
-                  st.key === key ? { ...st, status: s, timestamp: (s === "done" || s === "error") ? new Date().toLocaleTimeString() : st.timestamp } : st
+                const advance = (key, s, label) => setSteps(prev => prev.map(st =>
+                  st.key === key ? { ...st, status: s, label: label || st.label, timestamp: (s === "done" || s === "error") ? new Date().toLocaleTimeString() : st.timestamp } : st
                 ));
                 const handleDeploy = async () => {
                   setStatus("deploying");
+                  const abortCtrl = new AbortController();
                   try {
                     advance("auth", "active");
                     await demoDelay(isLive, 800);
                     advance("auth", "done");
                     advance("create", "active");
-                    if (targetAll) {
-                      const groupId = resolveGroupId(groupName);
-                      await api.deployApp(app.name, app.wingetId, groupId);
-                    } else {
-                      for (const d of targetDevices) {
-                        await api.deployApp(app.name, app.wingetId, d.id);
-                      }
+                    const deployTargets = targetAll ? deviceList : targetDevices;
+                    for (const d of deployTargets) {
+                      await api.deployApp(app.name, app.wingetId, d.id);
                     }
-                    await demoDelay(isLive, 1000);
                     advance("create", "done");
-                    advance("assign", "active");
-                    await demoDelay(isLive, 600);
-                    advance("assign", "done");
+                    advance("install", "active");
+                    const firstTarget = (targetAll ? deviceList : targetDevices)[0];
+                    if (isLive && firstTarget) {
+                      const finalState = await api.pollDeployStatus(
+                        firstTarget.id, app.wingetId,
+                        (data) => {
+                          const s = data.executionState || data.provisioningState;
+                          advance("install", "active", `Installing on machine — ${s}...`);
+                        },
+                        abortCtrl.signal
+                      );
+                      if (finalState !== "Succeeded") throw new Error(`Install ended with: ${finalState}`);
+                    } else {
+                      await demoDelay(isLive, 1200);
+                    }
+                    advance("install", "done");
                     advance("done", "done");
                     setStatus("deployed");
                   } catch (e) {
+                    abortCtrl.abort();
                     setSteps(prev => prev.map(st => st.status === "active" ? { ...st, status: "error", timestamp: new Date().toLocaleTimeString() } : st));
                     setStatus("error");
                   }
@@ -1101,7 +1041,7 @@ export default function IntuneChat() {
             };
 
             addBot(
-              `I'll deploy ${app.name} via Microsoft Graph API. Select your target devices:`,
+              `I'll deploy ${app.name} via Azure Arc WinGet extension. Select your target machines:`,
               <DynamicAppDeploy />
             );
           } else {
@@ -1153,10 +1093,10 @@ export default function IntuneChat() {
               const targetLabel = targetAll ? groupName : `${targetDevices.length} device${targetDevices.length !== 1 ? "s" : ""}`;
               const [status, setStatus] = useState("idle");
               const [steps, setSteps] = useState([
-                { key: "auth", label: "Authenticating with Microsoft Graph", status: "pending", timestamp: null },
-                { key: "create", label: `Creating ${updateType} profile`, status: "pending", timestamp: null },
-                { key: "assign", label: `Assigning update ring to ${targetLabel}`, status: "pending", timestamp: null },
-                { key: "done", label: "Update deployment configured", status: "pending", timestamp: null },
+                { key: "auth", label: "Authenticating with Azure ARM", status: "pending", timestamp: null },
+                { key: "create", label: `Triggering ${updateType} on ${targetLabel}`, status: "pending", timestamp: null },
+                { key: "assign", label: "Patch install dispatched to machines", status: "pending", timestamp: null },
+                { key: "done", label: "Update deployment initiated", status: "pending", timestamp: null },
               ]);
               const advance = (key, s) => setSteps(prev => prev.map(st =>
                 st.key === key ? { ...st, status: s, timestamp: (s === "done" || s === "error") ? new Date().toLocaleTimeString() : st.timestamp } : st
@@ -1168,15 +1108,9 @@ export default function IntuneChat() {
                   await demoDelay(isLive, 800);
                   advance("auth", "done");
                   advance("create", "active");
-                  if (targetAll) {
-                    const groupId = resolveGroupId(groupName);
-                    if (updateType === "Feature Update") await api.pushFeatureUpdate(groupId);
-                    else await api.pushQualityUpdate(groupId);
-                  } else {
-                    for (const d of targetDevices) {
-                      if (updateType === "Feature Update") await api.pushFeatureUpdate(d.id);
-                      else await api.pushQualityUpdate(d.id);
-                    }
+                  const updateTargets = targetAll ? deviceList : targetDevices;
+                  for (const d of updateTargets) {
+                    await api.pushUpdate(d.id);
                   }
                   await demoDelay(isLive, 1000);
                   advance("create", "done");
@@ -1274,7 +1208,7 @@ export default function IntuneChat() {
                   <div>
                     <LiveActionTracker actionLabel="Sync" deviceStates={deviceStates} totalCount={targetDevices.length} completedCount={completed} />
                     {finished && (
-                      <InfoBox color="#60a5fa" borderColor="#1e3a5f" bg="#172554">
+                      <InfoBox color="#d4a574" borderColor="#4a3a1a" bg="#2a2416">
                         {deviceStates.filter(d => d.status === "success").length} device{targetDevices.length !== 1 ? "s" : ""} synced. Check-in results will appear within 15 minutes.
                       </InfoBox>
                     )}
@@ -1351,7 +1285,7 @@ export default function IntuneChat() {
                       <button onClick={handleExecute} disabled={executing} style={{
                         marginTop: 10, width: "100%", padding: "10px 0", borderRadius: 8, border: "none",
                         fontWeight: 600, fontSize: 13, cursor: executing ? "not-allowed" : "pointer",
-                        background: isWipe ? "linear-gradient(135deg, #dc2626, #ef4444)" : "linear-gradient(135deg, #7c3aed, #8b5cf6)",
+                        background: isWipe ? "#dc2626" : "#7c3aed",
                         color: "#fff", opacity: executing ? 0.6 : 1,
                       }}>
                         {executing ? `${actionName}ing...` : `Confirm ${actionName} (${targetDevices.length} device${targetDevices.length !== 1 ? "s" : ""})`}
@@ -1543,9 +1477,9 @@ export default function IntuneChat() {
                       animation: actionMsg.phase === "enter" ? "fadeSlideIn 0.3s ease" : actionMsg.phase === "exit" ? "fadeSlideOut 0.3s ease forwards" : "none",
                     }}>
                       <InfoBox
-                        color={actionMsg.ok === null ? "#60a5fa" : actionMsg.ok ? "#34d399" : "#f87171"}
-                        borderColor={actionMsg.ok === null ? "#1e3a5f" : actionMsg.ok ? "#166534" : "#7f1d1d"}
-                        bg={actionMsg.ok === null ? "#172554" : actionMsg.ok ? "#0d3320" : "#3b1118"}
+                        color={actionMsg.ok === null ? "#d4a574" : actionMsg.ok ? "#34d399" : "#f87171"}
+                        borderColor={actionMsg.ok === null ? "#4a3a1a" : actionMsg.ok ? "#166534" : "#7f1d1d"}
+                        bg={actionMsg.ok === null ? "#2a2416" : actionMsg.ok ? "#0d3320" : "#3b1118"}
                       >{actionMsg.text}</InfoBox>
                     </div>
                   )}
@@ -1553,7 +1487,7 @@ export default function IntuneChat() {
               );
             };
             addBot(
-              `${isLive ? "Live" : "Demo"} device inventory — ${devices.length} enrolled devices. Select individual devices or use the checkbox to select all:`,
+              `${isLive ? "Live" : "Demo"} machine inventory — ${devices.length} Arc-connected machines. Select individual machines or use the checkbox to select all:`,
               <DeviceTableWithActions />
             );
           }
@@ -1621,7 +1555,7 @@ export default function IntuneChat() {
                     { label: "Non-Compliant", count: summary.noncompliant, color: "#f87171", bg: "#3b1118" },
                     { label: "Grace Period", count: summary.inGracePeriod, color: "#fbbf24", bg: "#3b2e10" },
                   ].map(s => (
-                    <div key={s.label} style={{ background: s.bg, borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                    <div key={s.label} style={{ background: s.bg, borderRadius: 4, padding: "14px 16px", textAlign: "center" }}>
                       <div style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.count}</div>
                       <div style={{ fontSize: 11, color: s.color, opacity: 0.8, marginTop: 2 }}>{s.label}</div>
                     </div>
@@ -1674,19 +1608,18 @@ export default function IntuneChat() {
           const nonCompliant = compliance.summary.noncompliant;
           setIsTyping(false);
           addBot(
-            `${isLive ? "Live" : "Demo"} Intune dashboard from Microsoft Graph API:`,
+            `${isLive ? "Live" : "Demo"} Arc dashboard from Azure ARM:`,
             <div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
                 {[
-                  { label: "Enrolled Devices", value: total, icon: "💻", color: "#d4a574" },
+                  { label: "Arc Machines", value: total, icon: "💻", color: "#d4a574" },
                   { label: "Non-Compliant", value: nonCompliant, icon: "⚠️", color: nonCompliant > 0 ? "#f87171" : "#34d399" },
                   { label: "Compliant", value: compliance.summary.compliant, icon: "✅", color: "#34d399" },
                   { label: "Grace Period", value: compliance.summary.inGracePeriod, icon: "⏳", color: "#fbbf24" },
                 ].map(s => (
                   <div key={s.label} style={{
-                    background: "rgba(15,26,46,0.5)", border: "1px solid rgba(30,41,59,0.5)",
-                    backdropFilter: "blur(8px)",
-                    borderRadius: 12, padding: "14px 16px",
+                    background: "#0c1524", border: "1px solid #1a2740",
+                    borderRadius: 4, padding: "14px 16px",
                     display: "flex", alignItems: "center", gap: 12,
                     transition: "all 0.2s ease",
                   }}>
@@ -1699,7 +1632,7 @@ export default function IntuneChat() {
                 ))}
               </div>
               <InfoBox color="#94a3b8" borderColor="#1e293b" bg="#0f1a2e">
-                🏥 Service Health: {isLive ? "Connected to live tenant" : "Demo mode"} • Tenant: ivystravelers.onmicrosoft.com
+                🏥 Service Health: {isLive ? "Connected to Azure ARM" : "Demo mode"} • Provider: Microsoft.HybridCompute
               </InfoBox>
             </div>
           );
@@ -1715,10 +1648,10 @@ export default function IntuneChat() {
             const DynamicConfigCard = () => {
               const [status, setStatus] = useState("idle");
               const [steps, setSteps] = useState([
-                { key: "auth", label: "Authenticating with Microsoft Graph", status: "pending", timestamp: null },
-                { key: "create", label: "Creating Settings Catalog profile", status: "pending", timestamp: null },
-                { key: "assign", label: "Assigning to All Users & Devices", status: "pending", timestamp: null },
-                { key: "done", label: "Profile active", status: "pending", timestamp: null },
+                { key: "auth", label: "Authenticating with Azure ARM", status: "pending", timestamp: null },
+                { key: "create", label: "Deploying configuration extension", status: "pending", timestamp: null },
+                { key: "assign", label: "Pushing to all Arc machines", status: "pending", timestamp: null },
+                { key: "done", label: "Configuration applied", status: "pending", timestamp: null },
               ]);
               const advance = (key, s) => setSteps(prev => prev.map(st =>
                 st.key === key ? { ...st, status: s, timestamp: (s === "done" || s === "error") ? new Date().toLocaleTimeString() : st.timestamp } : st
@@ -1730,8 +1663,8 @@ export default function IntuneChat() {
                   await demoDelay(isLive, 800);
                   advance("auth", "done");
                   advance("create", "active");
-                  const groupId = resolveGroupId("All Users");
-                  await api.createConfigProfile("Date Time Region - Team 2", [], groupId);
+                  const machineNames = deviceList.map(d => d.id);
+                  await api.createConfigProfile("DateTimeConfig", ["Set-TimeZone -Id 'Eastern Standard Time'"], machineNames);
                   await demoDelay(isLive, 1000);
                   advance("create", "done");
                   advance("assign", "active");
@@ -1746,31 +1679,23 @@ export default function IntuneChat() {
               };
               return (
                 <div style={{
-                  background: "rgba(13,21,38,0.6)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  border: "1px solid rgba(24,36,65,0.6)",
-                  borderRadius: 12, padding: 18, marginTop: 8,
-                  position: "relative", overflow: "hidden",
+                  background: "#0c1524",
+                  border: "1px solid #1a2740",
+                  borderRadius: 4, padding: 18, marginTop: 8,
                 }}>
-                  <div style={{
-                    position: "absolute", top: 0, left: 0, right: 0, height: 2,
-                    background: "linear-gradient(90deg, transparent, rgba(13,148,136,0.4), transparent)",
-                  }} />
                   <div style={{ color: "#e2e8f0", fontWeight: 700, fontSize: 14 }}>Configuration Profile</div>
                   <div style={{ marginTop: 10, fontSize: 12, color: "#94a3b8", lineHeight: 1.8 }}>
                     <div><span style={{ color: "#64748b" }}>Platform:</span> Windows 10/11</div>
-                    <div><span style={{ color: "#64748b" }}>Profile Type:</span> Settings Catalog</div>
-                    <div><span style={{ color: "#64748b" }}>Allow Date/Time:</span> <span style={{ color: "#34d399" }}>Enabled</span></div>
-                    <div><span style={{ color: "#64748b" }}>Allow Region:</span> <span style={{ color: "#34d399" }}>Enabled</span></div>
-                    <div><span style={{ color: "#64748b" }}>Assignment:</span> All Users & Devices</div>
-                    <div><span style={{ color: "#64748b" }}>API Endpoint:</span> <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "#d4a574" }}>POST /configurationPolicies</span></div>
+                    <div><span style={{ color: "#64748b" }}>Extension Type:</span> RunCommandHandlerWindows</div>
+                    <div><span style={{ color: "#64748b" }}>Set-TimeZone:</span> <span style={{ color: "#34d399" }}>Eastern Standard Time</span></div>
+                    <div><span style={{ color: "#64748b" }}>Scope:</span> All Arc-connected machines</div>
+                    <div><span style={{ color: "#64748b" }}>API Endpoint:</span> <span style={{ fontFamily: "'JetBrains Mono', monospace", color: "#d4a574" }}>PUT /config/extension</span></div>
                   </div>
                   {status === "idle" && (
                     <button onClick={handleDeploy} style={{
-                      marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 8, border: "none",
+                      marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 3, border: "none",
                       fontWeight: 600, fontSize: 13, cursor: "pointer",
-                      background: "linear-gradient(135deg, #0d9488, #14b8a6)", color: "#fff",
+                      background: "#0d9488", color: "#fff",
                     }}>Create & Assign Profile</button>
                   )}
                   {status === "deploying" && <StepProgress steps={steps} gradient="#0d9488, #14b8a6" />}
@@ -1778,7 +1703,7 @@ export default function IntuneChat() {
                     <div>
                       <StepProgress steps={steps} gradient="#0d9488, #14b8a6" />
                       <InfoBox color="#34d399" borderColor="#166534" bg="#0d3320">
-                        Profile created and assigned via Graph API. Devices will apply settings on next sync.
+                        Extension deployed via Azure Arc. Machines will apply settings on next agent check-in.
                       </InfoBox>
                     </div>
                   )}
@@ -1794,13 +1719,13 @@ export default function IntuneChat() {
               );
             };
             addBot(
-              "Based on Team 2' travel policy, I'll create a Date, Time & Region configuration profile via POST /deviceManagement/configurationPolicies.",
+              "Based on Team 2's travel policy, I'll deploy a Date, Time & Region configuration extension via Azure Arc run-command.",
               <DynamicConfigCard />
             );
           } else {
             setIsTyping(false);
             addBot(
-              "I can create configuration profiles via the Settings Catalog API. What would you like to configure? Options include: Date/Time/Region settings, Wi-Fi profiles, VPN, Email, Device restrictions, Endpoint protection."
+              "I can deploy configuration extensions via Azure Arc run-command. What would you like to configure? Options include: Date/Time/Region settings, timezone, software installs, device restrictions, and custom PowerShell scripts."
             );
           }
           break;
@@ -1816,11 +1741,11 @@ export default function IntuneChat() {
       addBot(
         `❌ Error: ${err.message}`,
         <InfoBox color="#f87171" borderColor="#7f1d1d" bg="#3b1118">
-          API call failed. {isLive ? "Check your Azure backend connection and Graph API permissions." : "Unexpected error in demo mode."}
+          API call failed. {isLive ? "Check your Azure backend connection and ARM permissions (CLIENT_ID, TENANT_ID, CLIENT_SECRET)." : "Unexpected error in demo mode."}
         </InfoBox>
       );
     }
-  }, [addBot, isLive, groups, resolveGroupId, deviceList, updateDeviceStatus, removeDevices]);
+  }, [addBot, isLive, deviceList, updateDeviceStatus, removeDevices]);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
@@ -1850,54 +1775,28 @@ export default function IntuneChat() {
     <div style={{
       width: "100%", height: "100vh",
       display: "flex", flexDirection: "column",
-      background: `
-        radial-gradient(ellipse at 20% 0%, rgba(59,130,246,0.06) 0%, transparent 60%),
-        radial-gradient(ellipse at 80% 100%, rgba(139,92,246,0.04) 0%, transparent 50%),
-        #060b14`,
-      fontFamily: "'Instrument Sans', 'SF Pro Display', -apple-system, sans-serif",
+      background: "#0c0c0e",
+      fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       overflow: "hidden", position: "relative",
     }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap');
         @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-6px); opacity: 1; } }
         @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes fadeSlideOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-8px); } }
-        @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); } 50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.15); } }
-        @keyframes meshFloat {
-          0%, 100% { background-position: 0% 0%; }
-          25% { background-position: 100% 0%; }
-          50% { background-position: 100% 100%; }
-          75% { background-position: 0% 100%; }
-        }
-        @keyframes shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
-        }
-        @keyframes glowPulse {
-          0%, 100% { box-shadow: 0 0 15px rgba(59,130,246,0.05), 0 0 30px rgba(59,130,246,0); }
-          50% { box-shadow: 0 0 15px rgba(59,130,246,0.1), 0 0 30px rgba(59,130,246,0.05); }
-        }
-        @keyframes logoGlow {
-          0%, 100% { box-shadow: 0 12px 40px rgba(59,130,246,0.25), 0 0 0 0 rgba(59,130,246,0); }
-          50% { box-shadow: 0 12px 40px rgba(59,130,246,0.3), 0 0 0 8px rgba(59,130,246,0.08); }
-        }
-        @keyframes gradientShift {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
+
         @keyframes progressShimmer {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body, #root { height: 100%; }
-        ::selection { background: rgba(59,130,246,0.3); color: #e2e8f0; }
+        ::selection { background: rgba(201,162,39,0.25); color: #f5f5f4; }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(30,41,59,0.5); border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(51,65,85,0.6); }
-        input:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.15), 0 0 20px rgba(59,130,246,0.1) !important; }
+        input:focus { border-color: #c9a227 !important; box-shadow: 0 0 0 2px rgba(201,162,39,0.2) !important; }
       `}</style>
 
       {showSettings && (
@@ -1907,29 +1806,20 @@ export default function IntuneChat() {
 
       {/* Header */}
       <div style={{
-        padding: "14px 28px",
-        background: "rgba(8,14,26,0.75)",
-        backdropFilter: "blur(20px) saturate(1.4)",
-        WebkitBackdropFilter: "blur(20px) saturate(1.4)",
+        padding: "10px 20px",
+        background: "#080e1a",
         flexShrink: 0,
         borderBottom: "1px solid rgba(30,41,59,0.3)",
-        position: "relative",
       }}>
-        <div style={{
-          position: "absolute", bottom: 0, left: 0, right: 0, height: 1,
-          background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.15), transparent)",
-        }} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 960, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 780, margin: "0 auto 0 max(20px, calc((100% - 780px) * 0.35))" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{
-              width: 38, height: 38, borderRadius: 10,
-              background: "linear-gradient(135deg, #1e40af, #3b82f6)",
-              display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
-              boxShadow: "0 4px 16px rgba(59,130,246,0.25), 0 0 0 1px rgba(59,130,246,0.1)",
-            }}>🛡️</div>
+              fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontWeight: 700,
+              color: "#c9a227", border: "1px solid #4a3a1a", padding: "4px 8px", borderRadius: 3,
+            }}>ACC</div>
             <div>
-              <div style={{ color: "#f1f5f9", fontSize: 16, fontWeight: 700, letterSpacing: -0.3 }}>Intune Command Center</div>
-              <div style={{ color: "#475569", fontSize: 11, fontWeight: 500, letterSpacing: 0.3, transition: "color 0.3s ease" }}>
+              <div style={{ color: "#f1f5f9", fontSize: 15, fontWeight: 700, letterSpacing: -0.3 }}>Arc Command Center</div>
+              <div style={{ color: "#475569", fontSize: 11, fontWeight: 500, letterSpacing: 0.3 }}>
                 Team 2 &middot; CloudGuard Consulting
               </div>
             </div>
@@ -1938,77 +1828,54 @@ export default function IntuneChat() {
             {messages.length > 0 && (
               <button onClick={() => { setMessages([]); if (!isLive) setDeviceList(DEMO_DEVICES); }} title="New conversation"
                 style={{
-                  height: 34, paddingInline: 14, borderRadius: 8,
+                  height: 34, paddingInline: 14, borderRadius: 3,
                   border: "1px solid rgba(30,41,59,0.5)",
-                  background: "rgba(13,21,38,0.6)",
-                  backdropFilter: "blur(8px)",
+                  background: "#0c1524",
                   color: "#94a3b8", cursor: "pointer", fontSize: 12, fontWeight: 500,
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                  transition: "all 0.2s", fontFamily: "inherit",
+                  transition: "all 0.15s", fontFamily: "inherit",
                 }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(59,130,246,0.4)"; e.currentTarget.style.color = "#e2e8f0"; e.currentTarget.style.background = "rgba(19,31,56,0.7)"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.background = "rgba(13,21,38,0.6)"; }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "#2a3f5f"; e.currentTarget.style.color = "#e2e8f0"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; }}
               >⌂ Home</button>
             )}
             <div style={{
-              display: "flex", alignItems: "center", gap: 6, padding: "5px 12px",
-              background: isLive ? "rgba(10,38,24,0.7)" : "rgba(40,32,10,0.7)",
-              backdropFilter: "blur(8px)",
-              WebkitBackdropFilter: "blur(8px)",
-              borderRadius: 99,
-              border: `1px solid ${isLive ? "rgba(20,83,45,0.6)" : "rgba(113,63,18,0.6)"}`,
+              display: "flex", alignItems: "center", gap: 6, padding: "4px 0",
             }}>
               <div style={{
-                width: 7, height: 7, borderRadius: "50%",
+                width: 6, height: 6, borderRadius: "50%",
                 background: isLive ? "#34d399" : "#fbbf24",
-                animation: isLive ? "pulseGlow 2s infinite" : "none",
               }} />
-              <span style={{ color: isLive ? "#34d399" : "#fbbf24", fontSize: 11, fontWeight: 600, letterSpacing: 0.5 }}>
+              <span style={{ color: isLive ? "#34d399" : "#fbbf24", fontSize: 10, fontWeight: 700, letterSpacing: 1, fontFamily: "'JetBrains Mono', monospace" }}>
                 {isLive ? "LIVE" : "DEMO"}
               </span>
             </div>
             <button onClick={() => setShowSettings(true)} style={{
-              width: 34, height: 34, borderRadius: 8,
+              width: 34, height: 34, borderRadius: 3,
               border: "1px solid rgba(30,41,59,0.5)",
-              background: "rgba(13,21,38,0.6)",
-              backdropFilter: "blur(8px)",
+              background: "#0c1524",
               color: "#94a3b8", cursor: "pointer", fontSize: 14,
               display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all 0.2s",
+              transition: "all 0.15s",
             }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(59,130,246,0.4)"; e.currentTarget.style.color = "#e2e8f0"; e.currentTarget.style.background = "rgba(19,31,56,0.7)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.background = "rgba(13,21,38,0.6)"; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "#2a3f5f"; e.currentTarget.style.color = "#e2e8f0"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; }}
             >⚙️</button>
           </div>
         </div>
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
-        <div style={{ maxWidth: 960, margin: "0 auto" }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "24px 20px" }}>
+        <div style={{ maxWidth: 780, margin: "0 auto 0 max(20px, calc((100% - 780px) * 0.35))" }}>
           {messages.length === 0 ? (
             <WelcomeScreen onQuickAction={handleQuickAction} isLive={isLive} />
           ) : (
             <>
               {messages.map((msg, i) => <MessageBubble key={i} message={msg} />)}
               {isTyping && (
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{
-                    width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-                    background: "linear-gradient(135deg, #1e40af, #3b82f6)",
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
-                    boxShadow: "0 0 12px rgba(59,130,246,0.2), 0 0 0 1px rgba(59,130,246,0.15)",
-                  }}>🛡️</div>
-                  <div style={{
-                    padding: "10px 18px",
-                    background: "rgba(13,21,38,0.7)",
-                    backdropFilter: "blur(12px)",
-                    WebkitBackdropFilter: "blur(12px)",
-                    border: "1px solid rgba(24,36,65,0.6)",
-                    borderRadius: "18px 18px 18px 4px",
-                  }}>
-                    <TypingIndicator />
-                  </div>
+                <div style={{ padding: "4px 0" }}>
+                  <TypingIndicator />
                 </div>
               )}
             </>
@@ -2018,34 +1885,26 @@ export default function IntuneChat() {
 
       {/* Suggestions */}
       {messages.length > 0 && messages.length < 3 && (
-        <div style={{ padding: "0 28px 10px" }}>
-          <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {["Deploy Slack to Remote Workers", "Show compliance", "Push quality update", "Sync all devices"].map(s => (
+        <div style={{ padding: "0 20px 10px" }}>
+          <div style={{ maxWidth: 780, margin: "0 auto 0 max(20px, calc((100% - 780px) * 0.35))", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {["Deploy Chrome to all machines", "Show compliance", "Push quality update", "Sync all devices"].map(s => (
               <button key={s} onClick={() => handleQuickAction(s)}
                 style={{
-                  padding: "7px 14px", borderRadius: 99,
-                  border: "1px solid rgba(24,36,65,0.6)",
-                  background: "rgba(13,21,38,0.5)",
-                  backdropFilter: "blur(8px)",
-                  WebkitBackdropFilter: "blur(8px)",
+                  padding: "6px 12px", borderRadius: 3,
+                  border: "1px solid #1a2740",
+                  background: "#0c1524",
                   color: "#94a3b8", fontSize: 12, cursor: "pointer",
-                  transition: "all 0.2s", fontWeight: 500, fontFamily: "inherit",
+                  transition: "all 0.15s", fontWeight: 500, fontFamily: "inherit",
                 }}
                 onMouseEnter={e => {
-                  e.target.style.borderColor = "rgba(59,130,246,0.4)";
+                  e.target.style.borderColor = "#2a3f5f";
                   e.target.style.color = "#e2e8f0";
-                  e.target.style.background = "rgba(19,31,56,0.7)";
-                  e.target.style.transform = "translateY(-1px)";
-                  e.target.style.boxShadow = "0 4px 12px rgba(59,130,246,0.1)";
                 }}
                 onMouseLeave={e => {
-                  e.target.style.borderColor = "rgba(24,36,65,0.6)";
+                  e.target.style.borderColor = "#1a2740";
                   e.target.style.color = "#94a3b8";
-                  e.target.style.background = "rgba(13,21,38,0.5)";
-                  e.target.style.transform = "translateY(0)";
-                  e.target.style.boxShadow = "none";
                 }}
-              >✦ {s}</button>
+              >{s}</button>
             ))}
           </div>
         </div>
@@ -2053,45 +1912,35 @@ export default function IntuneChat() {
 
       {/* Input */}
       <div style={{
-        padding: "16px 28px 20px",
-        background: "rgba(8,14,26,0.7)",
-        backdropFilter: "blur(20px) saturate(1.4)",
-        WebkitBackdropFilter: "blur(20px) saturate(1.4)",
+        padding: "10px 20px 14px",
+        background: "#080e1a",
         flexShrink: 0,
         borderTop: "1px solid rgba(30,41,59,0.3)",
-        position: "relative",
       }}>
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 1,
-          background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.15), transparent)",
-        }} />
-        <div style={{ maxWidth: 960, margin: "0 auto" }}>
+        <div style={{ maxWidth: 780, margin: "0 auto 0 max(20px, calc((100% - 780px) * 0.35))" }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <input value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleSend()}
               placeholder="Deploy Chrome to all PCs, push latest update, check compliance..."
               style={{
-                flex: 1, padding: "14px 20px", borderRadius: 14,
+                flex: 1, padding: "10px 14px", borderRadius: 3,
                 border: "1px solid rgba(24,36,65,0.8)",
-                background: "rgba(13,21,38,0.8)",
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
+                background: "#0c1524",
                 color: "#e2e8f0", fontSize: 14, outline: "none",
-                fontFamily: "inherit", transition: "all 0.2s",
+                fontFamily: "inherit", transition: "all 0.15s",
               }}
             />
             <button onClick={handleSend} disabled={!input.trim() || isTyping}
               style={{
-                width: 48, height: 48, borderRadius: 14, border: "none",
-                background: input.trim() && !isTyping ? "linear-gradient(135deg, #1e40af, #2563eb)" : "#182441",
+                width: 44, height: 44, borderRadius: 3, border: "none",
+                background: input.trim() && !isTyping ? "#a67c00" : "#1a1a1a",
                 color: input.trim() && !isTyping ? "#fff" : "#475569",
                 fontSize: 18, cursor: input.trim() && !isTyping ? "pointer" : "not-allowed",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "all 0.3s", flexShrink: 0,
-                boxShadow: input.trim() && !isTyping ? "0 4px 20px rgba(37,99,235,0.25)" : "none",
+                transition: "all 0.15s", flexShrink: 0,
               }}>↑</button>
           </div>
-          <div style={{ textAlign: "center", marginTop: 10, color: "#334155", fontSize: 11, letterSpacing: 0.3 }}>
+          <div style={{ textAlign: "left", marginTop: 8, color: "#334155", fontSize: 10, letterSpacing: 0.3, fontFamily: "'JetBrains Mono', monospace" }}>
             {isLive ? `Connected to ${apiUrl}` : "Demo mode — open settings to connect your Azure backend"}
           </div>
         </div>

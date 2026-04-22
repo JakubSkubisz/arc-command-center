@@ -1,123 +1,142 @@
 const { Router } = require("express");
-const { graphRequest } = require("../lib/graph");
+const { armRequest, scopedPath, subPath } = require("../lib/azure");
 const router = Router();
 
-// POST /api/updates/quality — Push quality (security) update
-router.post("/quality", async (req, res, next) => {
-  try {
-    const { displayName, groupId, releaseDate, daysUntilReboot } = req.body;
+const PROVIDER = "Microsoft.HybridCompute/machines";
 
-    const profile = await graphRequest(
+// POST /api/updates/assess — Trigger an update assessment on a machine
+router.post("/assess", async (req, res, next) => {
+  try {
+    const { machineName } = req.body;
+
+    const result = await armRequest(
       "POST",
-      "/deviceManagement/windowsQualityUpdateProfiles",
+      scopedPath(
+        `providers/${PROVIDER}/${machineName}/assessPatches`
+      ),
+      null,
+      "2024-07-10"
+    );
+
+    res.json({
+      success: true,
+      action: "assess",
+      machine: machineName,
+      status: result.status || "Accepted",
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/updates/install — Install updates on a machine
+router.post("/install", async (req, res, next) => {
+  try {
+    const {
+      machineName,
+      maximumDuration,
+      rebootSetting,
+      classifications,
+    } = req.body;
+
+    const result = await armRequest(
+      "POST",
+      scopedPath(
+        `providers/${PROVIDER}/${machineName}/installPatches`
+      ),
       {
-        "@odata.type": "#microsoft.graph.windowsQualityUpdateProfile",
-        displayName: displayName || "Security Update - Command Center",
-        description: "Pushed via Intune Command Center",
-        expeditedUpdateSettings: {
-          qualityUpdateRelease: releaseDate,
-          daysUntilForcedReboot: daysUntilReboot || 2,
+        maximumDuration: maximumDuration || "PT2H",
+        rebootSetting: rebootSetting || "IfRequired", // IfRequired, Never, Always
+        windowsParameters: {
+          classificationsToInclude: classifications || [
+            "Critical",
+            "Security",
+            "UpdateRollUp",
+          ],
         },
       },
-      true
+      "2024-07-10"
     );
 
-    await graphRequest(
-      "POST",
-      `/deviceManagement/windowsQualityUpdateProfiles/${profile.id}/assignments`,
-      {
-        assignments: [
-          {
-            target: {
-              "@odata.type": "#microsoft.graph.groupAssignmentTarget",
-              groupId,
-            },
-          },
-        ],
-      },
-      true
-    );
-
-    res.json({ success: true, profileId: profile.id });
+    res.json({
+      success: true,
+      action: "install",
+      machine: machineName,
+      status: result.status || "Accepted",
+    });
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/updates/feature — Push feature update
-router.post("/feature", async (req, res, next) => {
+// GET /api/updates/:machineName — Get latest patch assessment results
+router.get("/:machineName", async (req, res, next) => {
   try {
-    const { displayName, groupId, featureUpdateVersion } = req.body;
-
-    const profile = await graphRequest(
-      "POST",
-      "/deviceManagement/windowsFeatureUpdateProfiles",
-      {
-        "@odata.type": "#microsoft.graph.windowsFeatureUpdateProfile",
-        displayName: displayName || "Feature Update - Command Center",
-        description: "Pushed via Intune Command Center",
-        featureUpdateVersion: featureUpdateVersion || "Windows 11, version 24H2",
-      },
-      true
+    const data = await armRequest(
+      "GET",
+      scopedPath(
+        `providers/${PROVIDER}/${req.params.machineName}`
+      ),
+      null,
+      "2024-07-10"
     );
 
-    await graphRequest(
-      "POST",
-      `/deviceManagement/windowsFeatureUpdateProfiles/${profile.id}/assignments`,
-      {
-        assignments: [
-          {
-            target: {
-              "@odata.type": "#microsoft.graph.groupAssignmentTarget",
-              groupId,
-            },
-          },
-        ],
-      },
-      true
-    );
+    const patchStatus = data.properties?.osProfile?.windowsConfiguration?.patchSettings || {};
 
-    res.json({ success: true, profileId: profile.id });
+    res.json({
+      machine: req.params.machineName,
+      assessmentMode: patchStatus.assessmentMode || "Unknown",
+      patchMode: patchStatus.patchMode || "Unknown",
+      status: data.properties?.status,
+    });
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/updates/ring — Create Windows Update for Business ring
-router.post("/ring", async (req, res, next) => {
+// POST /api/updates/schedule — Create a maintenance configuration for scheduled updates
+router.post("/schedule", async (req, res, next) => {
   try {
-    const { displayName, groupId, qualityDeferral, featureDeferral } = req.body;
+    const {
+      configName,
+      location,
+      startDateTime,
+      duration,
+      recurEvery,
+      timeZone,
+    } = req.body;
 
-    const ring = await graphRequest(
-      "POST",
-      "/deviceManagement/deviceConfigurations",
+    const result = await armRequest(
+      "PUT",
+      subPath(
+        `providers/Microsoft.Maintenance/maintenanceConfigurations/${configName || "update-schedule"}`
+      ),
       {
-        "@odata.type":
-          "#microsoft.graph.windowsUpdateForBusinessConfiguration",
-        displayName: displayName || "Update Ring - Command Center",
-        qualityUpdatesDeferralPeriodInDays: qualityDeferral || 0,
-        featureUpdatesDeferralPeriodInDays: featureDeferral || 0,
-        automaticUpdateMode: "autoInstallAtMaintenanceTime",
-        businessReadyUpdatesOnly: "all",
-      }
-    );
-
-    await graphRequest(
-      "POST",
-      `/deviceManagement/deviceConfigurations/${ring.id}/assignments`,
-      {
-        assignments: [
-          {
-            target: {
-              "@odata.type": "#microsoft.graph.groupAssignmentTarget",
-              groupId,
+        location: location || "eastus",
+        properties: {
+          maintenanceScope: "InGuestPatch",
+          installPatches: {
+            rebootSetting: "IfRequired",
+            windowsParameters: {
+              classificationsToInclude: ["Critical", "Security"],
             },
           },
-        ],
-      }
+          maintenanceWindow: {
+            startDateTime: startDateTime || new Date().toISOString(),
+            duration: duration || "02:00",
+            recurEvery: recurEvery || "1Day",
+            timeZone: timeZone || "Eastern Standard Time",
+          },
+        },
+      },
+      "2023-04-01"
     );
 
-    res.json({ success: true, ringId: ring.id });
+    res.json({
+      success: true,
+      configId: result.id,
+      configName: result.name,
+    });
   } catch (err) {
     next(err);
   }

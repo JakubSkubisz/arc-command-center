@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 
@@ -13,7 +14,7 @@ app.use(express.json());
 
 // Health check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "Intune Command Center" });
+  res.json({ status: "ok", service: "Arc Command Center" });
 });
 
 // Route handlers
@@ -31,5 +32,5 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Intune Command Center API running on port ${PORT}`);
+  console.log(`Arc Command Center API running on port ${PORT}`);
 });

@@ -1,25 +1,28 @@
 const { Router } = require("express");
-const { graphRequest } = require("../lib/graph");
+const { armRequest, scopedPath } = require("../lib/azure");
 const router = Router();
 
-// GET /api/devices — List all managed devices
+const PROVIDER = "Microsoft.HybridCompute/machines";
+
+// GET /api/devices — List all Arc-connected machines
 router.get("/", async (req, res, next) => {
   try {
-    const data = await graphRequest(
+    const data = await armRequest(
       "GET",
-      "/deviceManagement/managedDevices?$select=id,deviceName,userDisplayName,operatingSystem,osVersion,complianceState,lastSyncDateTime,model,serialNumber,managedDeviceOwnerType"
+      scopedPath(`providers/${PROVIDER}`)
     );
     res.json(
-      data.value.map((d) => ({
-        id: d.id,
-        name: d.deviceName,
-        user: d.userDisplayName,
-        os: `${d.operatingSystem} ${d.osVersion}`,
-        status: d.complianceState,
-        lastSync: d.lastSyncDateTime,
-        model: d.model,
-        serial: d.serialNumber,
-        ownership: d.managedDeviceOwnerType,
+      (data.value || []).map((m) => ({
+        id: m.name,
+        resourceId: m.id,
+        name: m.properties.displayName || m.name,
+        user: m.properties.lastStatusChange ? "—" : "—",
+        os: `${m.properties.osName || ""} ${m.properties.osVersion || ""}`.trim(),
+        status: m.properties.status, // Connected, Disconnected, Error
+        lastSync: m.properties.lastStatusChange,
+        model: m.properties.model || "—",
+        serial: m.properties.serialNumber || "—",
+        ownership: "corporate",
       }))
     );
   } catch (err) {
@@ -27,54 +30,88 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// POST /api/devices/:id/sync — Trigger device sync
-router.post("/:id/sync", async (req, res, next) => {
+// GET /api/devices/:name — Get single machine details
+router.get("/:name", async (req, res, next) => {
   try {
-    await graphRequest(
-      "POST",
-      `/deviceManagement/managedDevices/${req.params.id}/syncDevice`
+    const data = await armRequest(
+      "GET",
+      scopedPath(`providers/${PROVIDER}/${req.params.name}`)
     );
-    res.json({ success: true, action: "sync", deviceId: req.params.id });
+    res.json({
+      id: data.name,
+      resourceId: data.id,
+      name: data.properties.displayName || data.name,
+      os: `${data.properties.osName || ""} ${data.properties.osVersion || ""}`.trim(),
+      status: data.properties.status,
+      lastSync: data.properties.lastStatusChange,
+      model: data.properties.model || "—",
+      serial: data.properties.serialNumber || "—",
+      agentVersion: data.properties.agentVersion,
+      machineFqdn: data.properties.machineFqdn,
+    });
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/devices/:id/reboot — Restart device
-router.post("/:id/reboot", async (req, res, next) => {
+// POST /api/devices/:name/run-command — Execute a script on the machine
+router.post("/:name/run-command", async (req, res, next) => {
   try {
-    await graphRequest(
-      "POST",
-      `/deviceManagement/managedDevices/${req.params.id}/rebootNow`
+    const { script } = req.body;
+    const machineName = req.params.name;
+    const runCommandName = `RunCommand-${Date.now()}`;
+
+    const result = await armRequest(
+      "PUT",
+      scopedPath(`providers/${PROVIDER}/${machineName}/runCommands/${runCommandName}`),
+      {
+        location: req.body.location || "eastus",
+        properties: {
+          source: {
+            script: Array.isArray(script) ? script.join("\n") : script,
+          },
+          asyncExecution: true,
+          timeoutInSeconds: 3600,
+        },
+      },
+      "2024-07-10"
     );
-    res.json({ success: true, action: "reboot", deviceId: req.params.id });
+
+    res.json({
+      success: true,
+      action: "run-command",
+      machine: machineName,
+      runCommandName,
+      provisioningState: result.properties?.provisioningState || "Accepted",
+    });
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/devices/:id/wipe — Factory reset (destructive!)
-router.post("/:id/wipe", async (req, res, next) => {
+// POST /api/devices/:name/reboot — Restart machine via run command
+router.post("/:name/reboot", async (req, res, next) => {
   try {
-    await graphRequest(
-      "POST",
-      `/deviceManagement/managedDevices/${req.params.id}/wipe`,
-      { keepUserData: req.body.keepUserData || false }
-    );
-    res.json({ success: true, action: "wipe", deviceId: req.params.id });
-  } catch (err) {
-    next(err);
-  }
-});
+    const machineName = req.params.name;
+    const runCommandName = `Reboot-${Date.now()}`;
 
-// POST /api/devices/:id/retire — Remove company data only
-router.post("/:id/retire", async (req, res, next) => {
-  try {
-    await graphRequest(
-      "POST",
-      `/deviceManagement/managedDevices/${req.params.id}/retire`
+    await armRequest(
+      "PUT",
+      scopedPath(`providers/${PROVIDER}/${machineName}/runCommands/${runCommandName}`),
+      {
+        location: req.body.location || "eastus",
+        properties: {
+          source: {
+            script: "Restart-Computer -Force",
+          },
+          asyncExecution: true,
+          timeoutInSeconds: 60,
+        },
+      },
+      "2024-07-10"
     );
-    res.json({ success: true, action: "retire", deviceId: req.params.id });
+
+    res.json({ success: true, action: "reboot", machine: machineName });
   } catch (err) {
     next(err);
   }

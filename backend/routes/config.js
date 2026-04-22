@@ -1,57 +1,132 @@
 const { Router } = require("express");
-const { graphRequest } = require("../lib/graph");
+const { armRequest, scopedPath, subPath } = require("../lib/azure");
 const router = Router();
 
-// GET /api/config/groups — List Entra ID groups for targeting
-router.get("/groups", async (req, res, next) => {
+const PROVIDER = "Microsoft.HybridCompute/machines";
+
+// GET /api/config/machines — List Arc machines (for targeting)
+router.get("/machines", async (req, res, next) => {
   try {
-    const data = await graphRequest(
+    const data = await armRequest(
       "GET",
-      "/groups?$select=id,displayName&$top=50"
+      scopedPath(`providers/${PROVIDER}`)
     );
-    res.json(data.value.map((g) => ({ id: g.id, name: g.displayName })));
+    res.json(
+      (data.value || []).map((m) => ({
+        id: m.name,
+        name: m.properties.displayName || m.name,
+        status: m.properties.status,
+      }))
+    );
   } catch (err) {
     next(err);
   }
 });
 
-// POST /api/config/profile — Create a configuration profile
-router.post("/profile", async (req, res, next) => {
+// GET /api/config/extensions/:machineName — List extensions on a machine
+router.get("/extensions/:machineName", async (req, res, next) => {
   try {
-    const { displayName, settings, groupId } = req.body;
+    const data = await armRequest(
+      "GET",
+      scopedPath(
+        `providers/${PROVIDER}/${req.params.machineName}/extensions`
+      ),
+      null,
+      "2024-07-10"
+    );
+    res.json(
+      (data.value || []).map((e) => ({
+        name: e.name,
+        publisher: e.properties?.publisher,
+        type: e.properties?.type,
+        provisioningState: e.properties?.provisioningState,
+        version: e.properties?.typeHandlerVersion,
+      }))
+    );
+  } catch (err) {
+    next(err);
+  }
+});
 
-    const profile = await graphRequest(
-      "POST",
-      "/deviceManagement/configurationPolicies",
+// PUT /api/config/extension — Install an extension on a machine
+router.put("/extension", async (req, res, next) => {
+  try {
+    const { machineName, extensionName, publisher, type, version, settings, location } =
+      req.body;
+
+    const result = await armRequest(
+      "PUT",
+      scopedPath(
+        `providers/${PROVIDER}/${machineName}/extensions/${extensionName}`
+      ),
       {
-        "@odata.type":
-          "#microsoft.graph.deviceManagementConfigurationPolicy",
-        name: displayName,
-        description: "Created via Intune Command Center",
-        platforms: "windows10",
-        technologies: "mdm",
-        settings,
+        location: location || "eastus",
+        properties: {
+          publisher,
+          type,
+          typeHandlerVersion: version || "1.0",
+          settings: settings || {},
+        },
       },
-      true
+      "2024-07-10"
     );
 
-    await graphRequest(
-      "POST",
-      `/deviceManagement/configurationPolicies/${profile.id}/assignments`,
+    res.json({
+      success: true,
+      extensionId: result.id,
+      provisioningState: result.properties?.provisioningState,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/config/policy — Assign an Azure Policy to the resource group
+router.post("/policy", async (req, res, next) => {
+  try {
+    const { displayName, policyDefinitionId, parameters } = req.body;
+    const assignmentName = `cc-${Date.now()}`;
+
+    const result = await armRequest(
+      "PUT",
+      scopedPath(
+        `providers/Microsoft.Authorization/policyAssignments/${assignmentName}`
+      ),
       {
-        assignments: [
-          {
-            target: {
-              "@odata.type": "#microsoft.graph.groupAssignmentTarget",
-              groupId,
-            },
-          },
-        ],
+        properties: {
+          displayName: displayName || "Policy - Command Center",
+          policyDefinitionId,
+          parameters: parameters || {},
+        },
       },
-      true
+      "2022-06-01"
     );
 
-    res.json({ success: true, profileId: profile.id });
+    res.json({
+      success: true,
+      assignmentId: result.id,
+      displayName: result.properties?.displayName,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/config/extension — Remove an extension from a machine
+router.delete("/extension", async (req, res, next) => {
+  try {
+    const { machineName, extensionName } = req.body;
+
+    await armRequest(
+      "DELETE",
+      scopedPath(
+        `providers/${PROVIDER}/${machineName}/extensions/${extensionName}`
+      ),
+      null,
+      "2024-07-10"
+    );
+
+    res.json({ success: true, action: "delete", extensionName, machine: machineName });
   } catch (err) {
     next(err);
   }

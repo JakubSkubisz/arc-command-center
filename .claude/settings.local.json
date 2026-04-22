@@ -4,7 +4,8 @@
       "WebSearch",
       "Bash(cursor:*)",
       "Bash(npm run dev:*)",
-      "Bash(open:*)"
+      "Bash(open:*)",
+      "Bash(PORT=3002 node:*)"
     ]
   }
 }
