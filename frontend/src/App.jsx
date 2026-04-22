@@ -824,6 +824,62 @@ function SettingsPanel({ apiUrl, setApiUrl, isLive, setIsLive, onClose, onTest }
   );
 }
 
+const DEPLOYABLE_APPS = APP_CATALOG.filter(a => [
+  "Google.Chrome", "Mozilla.Firefox", "7zip.7zip", "Microsoft.VisualStudioCode",
+  "VideoLAN.VLC", "Adobe.Acrobat.Reader.64-bit", "Zoom.Zoom",
+].includes(a.wingetId));
+
+function DeployAppCard({ onQuickAction }) {
+  const [selected, setSelected] = useState("");
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div style={{
+      background: "#0c1524", border: `1px solid ${hovered ? "#2a3f5f" : "#1a2740"}`,
+      borderRadius: 4, padding: "12px 14px", textAlign: "left", transition: "all 0.15s ease",
+    }}
+      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+        <span style={{ fontSize: 22 }}>📦</span>
+        <div>
+          <div style={{ color: "#e2e8f0", fontSize: 14, fontWeight: 600 }}>Deploy an App</div>
+          <div style={{ color: "#64748b", fontSize: 12, marginTop: 3 }}>Push software to devices</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <select
+          value={selected}
+          onChange={e => setSelected(e.target.value)}
+          style={{
+            flex: 1, background: "#0a1120", border: "1px solid #1e3050", borderRadius: 3,
+            color: selected ? "#e2e8f0" : "#64748b", fontSize: 12, padding: "5px 8px",
+            outline: "none", cursor: "pointer",
+          }}
+        >
+          <option value="" disabled>Select application...</option>
+          {DEPLOYABLE_APPS.map(a => (
+            <option key={a.wingetId} value={a.wingetId}>{a.name}</option>
+          ))}
+        </select>
+        <button
+          disabled={!selected}
+          onClick={() => {
+            const app = DEPLOYABLE_APPS.find(a => a.wingetId === selected);
+            if (app) onQuickAction(`Install ${app.name} on All Devices`);
+          }}
+          style={{
+            background: selected ? "#c9a227" : "#1a2740", border: "none", borderRadius: 3,
+            color: selected ? "#0a0e1a" : "#374151", fontSize: 12, fontWeight: 600,
+            padding: "5px 12px", cursor: selected ? "pointer" : "default", transition: "all 0.15s",
+          }}
+        >
+          Deploy
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function WelcomeScreen({ onQuickAction, isLive }) {
   return (
     <div style={{ padding: "40px 0", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", minHeight: "100%" }}>
@@ -846,7 +902,7 @@ function WelcomeScreen({ onQuickAction, isLive }) {
       <div style={{
         display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 8, marginTop: 28, width: "100%",
       }}>
-        <ActionCard icon="📦" title="Deploy an App" subtitle="Push software to devices" onClick={() => onQuickAction("Install Google Chrome on All Devices")} />
+        <DeployAppCard onQuickAction={onQuickAction} />
         <ActionCard icon="🔄" title="Push Updates" subtitle="Windows quality patches" onClick={() => onQuickAction("Push latest quality update to All Devices")} />
         <ActionCard icon="📊" title="Check Devices" subtitle="View fleet status" onClick={() => onQuickAction("Show me all device statuses")} />
         <ActionCard icon="🔒" title="Compliance" subtitle="View compliance report" onClick={() => onQuickAction("Show compliance status for all devices")} />
