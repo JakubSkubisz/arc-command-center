@@ -257,56 +257,43 @@ function demoDelay(isLive, ms = 700) {
 // ============================================================
 function TypingIndicator() {
   return (
-    <div style={{ display: "flex", gap: 4, padding: "8px 0", alignItems: "center" }}>
+    <div className="flex gap-1 py-2 items-center">
       {[0, 1, 2].map(i => (
-        <div key={i} style={{
-          width: 7, height: 7, borderRadius: "50%", background: "#64748b",
-          animation: `typingBounce 1.2s ease-in-out ${i * 0.15}s infinite`,
-        }} />
+        <div key={i} className="w-2 h-2 rounded-full bg-slate-400"
+          style={{ animation: `typingBounce 1.2s ease-in-out ${i * 0.15}s infinite` }} />
       ))}
     </div>
   );
 }
 
 function StatusBadge({ status }) {
-  const colors = {
-    Compliant: { bg: "#0d3320", text: "#34d399", border: "#166534" },
-    Connected: { bg: "#0d3320", text: "#34d399", border: "#166534" },
-    "Non-Compliant": { bg: "#3b1118", text: "#f87171", border: "#7f1d1d" },
-    Disconnected: { bg: "#3b1118", text: "#f87171", border: "#7f1d1d" },
-    "In Grace Period": { bg: "#3b2e10", text: "#fbbf24", border: "#78350f" },
-    Pending: { bg: "#1e293b", text: "#94a3b8", border: "#334155" },
-    Deployed: { bg: "#0d3320", text: "#34d399", border: "#166534" },
-    Queued: { bg: "#2a2416", text: "#d4a574", border: "#4a3a1a" },
-    Error: { bg: "#3b1118", text: "#f87171", border: "#7f1d1d" },
+  const cls = {
+    Compliant:        "bg-emerald-50 text-emerald-700 border-emerald-200",
+    Connected:        "bg-emerald-50 text-emerald-700 border-emerald-200",
+    "Non-Compliant":  "bg-red-50 text-red-600 border-red-200",
+    Disconnected:     "bg-red-50 text-red-600 border-red-200",
+    "In Grace Period":"bg-amber-50 text-amber-700 border-amber-200",
+    Pending:          "bg-slate-100 text-slate-500 border-slate-200",
+    Deployed:         "bg-emerald-50 text-emerald-700 border-emerald-200",
+    Queued:           "bg-blue-50 text-blue-600 border-blue-200",
+    Error:            "bg-red-50 text-red-600 border-red-200",
   };
-  const c = colors[status] || colors.Pending;
   return (
-    <span style={{
-      fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 3,
-      background: c.bg, color: c.text, border: `1px solid ${c.border}`,
-      letterSpacing: 0.3, textTransform: "uppercase",
-
-    }}>{status}</span>
+    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded border uppercase tracking-wide ${cls[status] || cls.Pending}`}>
+      {status}
+    </span>
   );
 }
 
 function ActionCard({ icon, title, subtitle, onClick }) {
-  const [hovered, setHovered] = useState(false);
   return (
-    <button onClick={onClick} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-      style={{
-        background: "#0c1524",
-        border: `1px solid ${hovered ? "#2a3f5f" : "#1a2740"}`,
-        borderRadius: 4, padding: "12px 14px", cursor: "pointer", textAlign: "left",
-        transition: "all 0.15s ease",
-        width: "100%",
-      }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ fontSize: 22 }}>{icon}</span>
+    <button onClick={onClick}
+      className="w-full text-left border border-slate-200 rounded-lg p-3.5 bg-white hover:border-blue-300 hover:shadow-sm transition-all duration-150 group">
+      <div className="flex items-center gap-3">
+        <span className="text-xl">{icon}</span>
         <div>
-          <div style={{ color: "#e2e8f0", fontSize: 14, fontWeight: 600 }}>{title}</div>
-          {subtitle && <div style={{ color: "#64748b", fontSize: 12, marginTop: 3 }}>{subtitle}</div>}
+          <div className="text-slate-800 text-sm font-semibold group-hover:text-blue-700 transition-colors">{title}</div>
+          {subtitle && <div className="text-slate-400 text-xs mt-0.5">{subtitle}</div>}
         </div>
       </div>
     </button>
@@ -831,30 +818,20 @@ const DEPLOYABLE_APPS = APP_CATALOG.filter(a => [
 
 function DeployAppCard({ onQuickAction }) {
   const [selected, setSelected] = useState("");
-  const [hovered, setHovered] = useState(false);
   return (
-    <div style={{
-      background: "#0c1524", border: `1px solid ${hovered ? "#2a3f5f" : "#1a2740"}`,
-      borderRadius: 4, padding: "12px 14px", textAlign: "left", transition: "all 0.15s ease",
-    }}
-      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-        <span style={{ fontSize: 22 }}>📦</span>
+    <div className="border border-slate-200 rounded-lg p-3.5 bg-white hover:border-blue-300 hover:shadow-sm transition-all duration-150">
+      <div className="flex items-center gap-3 mb-3">
+        <span className="text-xl">📦</span>
         <div>
-          <div style={{ color: "#e2e8f0", fontSize: 14, fontWeight: 600 }}>Deploy an App</div>
-          <div style={{ color: "#64748b", fontSize: 12, marginTop: 3 }}>Push software to devices</div>
+          <div className="text-slate-800 text-sm font-semibold">Deploy an App</div>
+          <div className="text-slate-400 text-xs mt-0.5">Push software to devices</div>
         </div>
       </div>
-      <div style={{ display: "flex", gap: 6 }}>
+      <div className="flex gap-2">
         <select
           value={selected}
           onChange={e => setSelected(e.target.value)}
-          style={{
-            flex: 1, background: "#0a1120", border: "1px solid #1e3050", borderRadius: 3,
-            color: selected ? "#e2e8f0" : "#64748b", fontSize: 12, padding: "5px 8px",
-            outline: "none", cursor: "pointer",
-          }}
+          className="flex-1 border border-slate-200 rounded text-xs px-2 py-1.5 bg-white text-slate-700 focus:border-blue-400 focus:outline-none cursor-pointer"
         >
           <option value="" disabled>Select application...</option>
           {DEPLOYABLE_APPS.map(a => (
@@ -867,11 +844,7 @@ function DeployAppCard({ onQuickAction }) {
             const app = DEPLOYABLE_APPS.find(a => a.wingetId === selected);
             if (app) onQuickAction(`Install ${app.name} on All Devices`);
           }}
-          style={{
-            background: selected ? "#c9a227" : "#1a2740", border: "none", borderRadius: 3,
-            color: selected ? "#0a0e1a" : "#374151", fontSize: 12, fontWeight: 600,
-            padding: "5px 12px", cursor: selected ? "pointer" : "default", transition: "all 0.15s",
-          }}
+          className={`text-xs font-semibold px-3 py-1.5 rounded transition-all ${selected ? "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer" : "bg-slate-100 text-slate-400 cursor-default"}`}
         >
           Deploy
         </button>
@@ -882,30 +855,45 @@ function DeployAppCard({ onQuickAction }) {
 
 function WelcomeScreen({ onQuickAction, isLive }) {
   return (
-    <div style={{ padding: "40px 0", textAlign: "left", display: "flex", flexDirection: "column", alignItems: "flex-start", minHeight: "100%" }}>
-      <h2 style={{
-        fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: -0.5,
-        color: "#e2e8f0",
-      }}>
-        Arc Command Center
-      </h2>
-      <p style={{ color: "#7c8db5", fontSize: 14, marginTop: 10, lineHeight: 1.7, maxWidth: 480 }}>
-        Manage your Team 2 Arc fleet. Deploy apps via WinGet, push patches, check machine health, and run commands — all through natural language.
-      </p>
-      {!isLive && (
-        <div style={{
-          display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", marginTop: 12,
-          background: "rgba(59,46,16,0.6)", border: "1px solid #78350f", borderRadius: 3,
-          color: "#fbbf24", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5,
-        }}>Demo Mode — click settings to connect Azure Arc</div>
-      )}
-      <div style={{
-        display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 8, marginTop: 28, width: "100%",
-      }}>
+    <div className="py-12">
+      {/* Hero */}
+      <div className="mb-10">
+        <div className={`inline-flex items-center gap-2 text-xs font-semibold px-3 py-1 rounded-full mb-5 border ${isLive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-emerald-500" : "bg-amber-400"}`} />
+          {isLive ? "Connected to Azure Arc" : "Demo Mode — open settings to connect"}
+        </div>
+        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight leading-tight mb-3">
+          Arc Command Center
+        </h1>
+        <p className="text-slate-500 text-base leading-relaxed max-w-md">
+          Manage your Azure Arc fleet. Deploy apps, push patches, check machine health, and run commands — all in one place.
+        </p>
+      </div>
+
+      {/* Quick actions */}
+      <div className="grid grid-cols-2 gap-3 mb-10">
         <DeployAppCard onQuickAction={onQuickAction} />
         <ActionCard icon="🔄" title="Push Updates" subtitle="Windows quality patches" onClick={() => onQuickAction("Push latest quality update to All Devices")} />
         <ActionCard icon="📊" title="Check Devices" subtitle="View fleet status" onClick={() => onQuickAction("Show me all device statuses")} />
         <ActionCard icon="🔒" title="Compliance" subtitle="View compliance report" onClick={() => onQuickAction("Show compliance status for all devices")} />
+      </div>
+
+      {/* Features */}
+      <div className="border-t border-slate-100 pt-8">
+        <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest mb-5">What you can do</p>
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { icon: "🖥️", title: "Device Management", desc: "List, sync, and reboot Arc-enrolled machines across your hybrid fleet." },
+            { icon: "🛡️", title: "Patch Management", desc: "Assess and install Windows updates via Azure Update Manager." },
+            { icon: "📋", title: "Compliance", desc: "Monitor connection status and policy compliance across all machines." },
+          ].map(f => (
+            <div key={f.title} className="p-4 rounded-lg border border-slate-100 bg-slate-50">
+              <div className="text-2xl mb-2">{f.icon}</div>
+              <div className="text-slate-800 text-sm font-semibold mb-1">{f.title}</div>
+              <div className="text-slate-500 text-xs leading-relaxed">{f.desc}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -914,19 +902,24 @@ function WelcomeScreen({ onQuickAction, isLive }) {
 function MessageBubble({ message }) {
   const isUser = message.role === "user";
   return (
-    <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12, animation: "fadeSlideIn 0.3s ease" }}>
-      <div style={{ maxWidth: "90%" }}>
-        <div style={{
-          padding: "10px 14px",
-          borderRadius: 0,
-          background: "transparent",
-          borderLeft: isUser ? "2px solid #334155" : "none",
-          color: "#e2e8f0", fontSize: 14, lineHeight: 1.7, whiteSpace: "pre-line",
-          fontWeight: isUser ? 500 : 400,
-        }}>{message.text}</div>
-        {message.component && (
-          <div style={{ marginTop: 8 }}>
-            {message.component}
+    <div className="flex justify-start mb-4 fade-in">
+      <div className="max-w-[90%] w-full">
+        {isUser ? (
+          <div className="inline-block bg-slate-100 text-slate-800 text-sm font-medium px-4 py-2.5 rounded-xl rounded-tl-sm leading-relaxed">
+            {message.text}
+          </div>
+        ) : (
+          <div>
+            {message.text && (
+              <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-line mb-2">
+                {message.text}
+              </div>
+            )}
+            {message.component && (
+              <div className="mt-1">
+                {message.component}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1828,112 +1821,57 @@ export default function ArcChat() {
   }, [apiUrl]);
 
   return (
-    <div style={{
-      width: "100%", height: "100vh",
-      display: "flex", flexDirection: "column",
-      background: "#0c0c0e",
-      fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-      overflow: "hidden", position: "relative",
-    }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap');
-        @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-6px); opacity: 1; } }
-        @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeSlideOut { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-8px); } }
-
-        @keyframes progressShimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body, #root { height: 100%; }
-        ::selection { background: rgba(201,162,39,0.25); color: #f5f5f4; }
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(30,41,59,0.5); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(51,65,85,0.6); }
-        input:focus { border-color: #c9a227 !important; box-shadow: 0 0 0 2px rgba(201,162,39,0.2) !important; }
-      `}</style>
+    <div className="flex flex-col h-screen bg-white font-sans overflow-hidden">
 
       {showSettings && (
         <SettingsPanel apiUrl={apiUrl} setApiUrl={setApiUrl} isLive={isLive} setIsLive={setIsLive}
           onClose={() => setShowSettings(false)} onTest={testConnection} />
       )}
 
-      {/* Header */}
-      <div style={{
-        padding: "10px 20px",
-        background: "#080e1a",
-        flexShrink: 0,
-        borderBottom: "1px solid rgba(30,41,59,0.3)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", maxWidth: 780, margin: "0 auto" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{
-              fontFamily: "'JetBrains Mono', monospace", fontSize: 13, fontWeight: 700,
-              color: "#c9a227", border: "1px solid #4a3a1a", padding: "4px 8px", borderRadius: 3,
-            }}>ACC</div>
+      {/* Nav */}
+      <nav className="border-b border-slate-100 bg-white/90 backdrop-blur-sm shrink-0 sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
+              <span className="text-white text-xs font-bold font-mono">A</span>
+            </div>
             <div>
-              <div style={{ color: "#f1f5f9", fontSize: 15, fontWeight: 700, letterSpacing: -0.3 }}>Arc Command Center</div>
-              <div style={{ color: "#475569", fontSize: 11, fontWeight: 500, letterSpacing: 0.3 }}>
-                Team 2 &middot; CloudGuard Consulting
-              </div>
+              <span className="text-slate-900 font-bold text-sm tracking-tight">Arc Command Center</span>
+              <span className="text-slate-400 text-xs ml-2 hidden sm:inline">Team 2 · CloudGuard Consulting</span>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="flex items-center gap-2">
             {messages.length > 0 && (
-              <button onClick={() => { setMessages([]); if (!isLive) setDeviceList(DEMO_DEVICES); }} title="New conversation"
-                style={{
-                  height: 34, paddingInline: 14, borderRadius: 3,
-                  border: "1px solid rgba(30,41,59,0.5)",
-                  background: "#0c1524",
-                  color: "#94a3b8", cursor: "pointer", fontSize: 12, fontWeight: 500,
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                  transition: "all 0.15s", fontFamily: "inherit",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "#2a3f5f"; e.currentTarget.style.color = "#e2e8f0"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; }}
-              >⌂ Home</button>
+              <button
+                onClick={() => { setMessages([]); if (!isLive) setDeviceList(DEMO_DEVICES); }}
+                className="text-xs font-medium text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-300 px-3 py-1.5 rounded-lg transition-all"
+              >
+                ⌂ Home
+              </button>
             )}
-            <div style={{
-              display: "flex", alignItems: "center", gap: 6, padding: "4px 0",
-            }}>
-              <div style={{
-                width: 6, height: 6, borderRadius: "50%",
-                background: isLive ? "#34d399" : "#fbbf24",
-              }} />
-              <span style={{ color: isLive ? "#34d399" : "#fbbf24", fontSize: 10, fontWeight: 700, letterSpacing: 1, fontFamily: "'JetBrains Mono', monospace" }}>
-                {isLive ? "LIVE" : "DEMO"}
-              </span>
+            <div className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${isLive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isLive ? "bg-emerald-500" : "bg-amber-400"}`} />
+              {isLive ? "Live" : "Demo"}
             </div>
-            <button onClick={() => setShowSettings(true)} style={{
-              width: 34, height: 34, borderRadius: 3,
-              border: "1px solid rgba(30,41,59,0.5)",
-              background: "#0c1524",
-              color: "#94a3b8", cursor: "pointer", fontSize: 14,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all 0.15s",
-            }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "#2a3f5f"; e.currentTarget.style.color = "#e2e8f0"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(30,41,59,0.5)"; e.currentTarget.style.color = "#94a3b8"; }}
-            >⚙️</button>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-all text-sm"
+            >
+              ⚙️
+            </button>
           </div>
         </div>
-      </div>
+      </nav>
 
       {/* Messages */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "24px 20px" }}>
-        <div style={{ maxWidth: 780, margin: "0 auto" }}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-4 py-6">
           {messages.length === 0 ? (
             <WelcomeScreen onQuickAction={handleQuickAction} isLive={isLive} />
           ) : (
             <>
               {messages.map((msg, i) => <MessageBubble key={i} message={msg} />)}
-              {isTyping && (
-                <div style={{ padding: "4px 0" }}>
-                  <TypingIndicator />
-                </div>
-              )}
+              {isTyping && <TypingIndicator />}
             </>
           )}
         </div>
@@ -1941,25 +1879,11 @@ export default function ArcChat() {
 
       {/* Suggestions */}
       {messages.length > 0 && messages.length < 3 && (
-        <div style={{ padding: "0 20px 10px" }}>
-          <div style={{ maxWidth: 780, margin: "0 auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="px-4 pb-2">
+          <div className="max-w-3xl mx-auto flex gap-2 flex-wrap">
             {["Deploy Chrome to all machines", "Show compliance", "Push quality update", "Sync all devices"].map(s => (
               <button key={s} onClick={() => handleQuickAction(s)}
-                style={{
-                  padding: "6px 12px", borderRadius: 3,
-                  border: "1px solid #1a2740",
-                  background: "#0c1524",
-                  color: "#94a3b8", fontSize: 12, cursor: "pointer",
-                  transition: "all 0.15s", fontWeight: 500, fontFamily: "inherit",
-                }}
-                onMouseEnter={e => {
-                  e.target.style.borderColor = "#2a3f5f";
-                  e.target.style.color = "#e2e8f0";
-                }}
-                onMouseLeave={e => {
-                  e.target.style.borderColor = "#1a2740";
-                  e.target.style.color = "#94a3b8";
-                }}
+                className="text-xs text-slate-500 border border-slate-200 hover:border-blue-300 hover:text-blue-600 px-3 py-1.5 rounded-full transition-all font-medium bg-white"
               >{s}</button>
             ))}
           </div>
@@ -1967,38 +1891,33 @@ export default function ArcChat() {
       )}
 
       {/* Input */}
-      <div style={{
-        padding: "10px 20px 14px",
-        background: "#080e1a",
-        flexShrink: 0,
-        borderTop: "1px solid rgba(30,41,59,0.3)",
-      }}>
-        <div style={{ maxWidth: 780, margin: "0 auto" }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <input value={input} onChange={e => setInput(e.target.value)}
+      <div className="border-t border-slate-100 bg-white shrink-0 px-4 py-3">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex gap-2 items-center">
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleSend()}
-              placeholder="Deploy Chrome to all PCs, push latest update, check compliance..."
-              style={{
-                flex: 1, padding: "10px 14px", borderRadius: 3,
-                border: "1px solid rgba(24,36,65,0.8)",
-                background: "#0c1524",
-                color: "#e2e8f0", fontSize: 14, outline: "none",
-                fontFamily: "inherit", transition: "all 0.15s",
-              }}
+              placeholder="Deploy Chrome, push updates, check compliance..."
+              className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 placeholder-slate-400 font-sans bg-white transition-all"
             />
-            <button onClick={handleSend} disabled={!input.trim() || isTyping}
-              style={{
-                width: 44, height: 44, borderRadius: 3, border: "none",
-                background: input.trim() && !isTyping ? "#a67c00" : "#1a1a1a",
-                color: input.trim() && !isTyping ? "#fff" : "#475569",
-                fontSize: 18, cursor: input.trim() && !isTyping ? "pointer" : "not-allowed",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "all 0.15s", flexShrink: 0,
-              }}>↑</button>
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || isTyping}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold transition-all shrink-0 ${input.trim() && !isTyping ? "bg-blue-600 text-white hover:bg-blue-700 cursor-pointer" : "bg-slate-100 text-slate-300 cursor-not-allowed"}`}
+            >↑</button>
           </div>
-          <div style={{ textAlign: "left", marginTop: 8, color: "#334155", fontSize: 10, letterSpacing: 0.3, fontFamily: "'JetBrains Mono', monospace" }}>
-            {isLive ? `Connected to ${apiUrl}` : "Demo mode — open settings to connect your Azure backend"}
-          </div>
+          <p className="text-xs text-slate-400 mt-2 font-mono">
+            {isLive ? `Connected · ${apiUrl}` : "Demo mode — open settings to connect your Azure backend"}
+          </p>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-slate-50 bg-white shrink-0 px-4 py-2">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
+          <span className="text-xs text-slate-300 font-mono">Arc Command Center · IT-4810 · Spring 2026</span>
+          <span className="text-xs text-slate-300">Governors State University</span>
         </div>
       </div>
     </div>
